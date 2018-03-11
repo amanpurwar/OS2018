@@ -158,6 +158,7 @@ int copy_pc2myfs(char *source, char *dest){
 		return -1;
 	else{
 		int next_empty_inode = get_next_empty_inode();
+		cout << "161 " << next_empty_inode << endl;
 		if(next_empty_inode==-1)
 			return -1;
 		else{
@@ -364,11 +365,12 @@ int ls_myfs(){
 	int cwd_inode_offset = 256*(temp->blocks_occupied+curr_wd);
 	inode *cwd_inode = (inode *)(file_system+cwd_inode_offset);
 	int direct_block_index =0;
+	int files_remaining = cwd_inode->file_count;
 	while(cwd_inode->direct[direct_block_index]!=-1){
 		int cwd_inode_db = cwd_inode->direct[direct_block_index];
 		int cwd_db_offset = DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+cwd_inode_db);
 		int db_index =0;
-		int files_remaining = cwd_inode->file_count;
+		
 		while(db_index<8 && files_remaining>0){
 			//cout<<" Files name "<<file_system+cwd_db_offset+32*db_index<<
 			//" inode nume "<<*((short *)(file_system+cwd_db_offset+32*db_index+30))<<endl;
@@ -459,13 +461,14 @@ int rm_myfs(char *filename){
 				cout<<file_system+cwd_db_offset+32*db_index<<" 452 file to delete "<<endl;
 				remove_file_db(temp, curr_inode);
 				clr(file_inode_no, temp->inode_bitmap);
+				temp->inodes_in_use--;
 				if(cwd_inode_file_count==1){
-					if(cwd_inode_file_count%8==1){
+					if(cwd_inode->file_count%8==1){
 						cwd_inode->direct[direct_block_index]=-1;
 					}
 					bzero(file_to_delete,32);
-					cwd_inode->file_count--;
-					return 1;
+					// cwd_inode->file_count--;
+					break;
 				}
 
 				/*
@@ -580,10 +583,18 @@ int main(){
 	cout<<showfile_myfs(a);
 
 	ls_myfs();
-	cout<<"Enter the file name :";
+	cout<<"Enter the file name del:";
 	
 	cin>>a;
 	rm_myfs(a);
-	ls_myfs(); 	
+	ls_myfs(); 
+
+	cout<<"Enter the file name dup:";
+	
+	cin>>a;
+	copy_pc2myfs(a,a);
+	showfile_myfs(a);
+	ls_myfs();
+
 
 }
