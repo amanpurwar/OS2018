@@ -387,8 +387,108 @@ int ls_myfs(){
 	
 }
 
+int remove_file_db(superblock * temp, inode* curr_inode){
+	int file_size = curr_inode->file_size;
+	int blocks_taken = ceil((double)file_size/256.0);
+	int direct_db_index =0;
+	while(blocks_taken>0 && direct_db_index<8 ){
+		int db_index = curr_inode->direct[direct_db_index];
+		clr(db_index, temp->db_bitmap);
+		direct_db_index++;
+		blocks_taken--;
+		temp->no_used_blocks--;
+	}
+	int single_indirect_offset = DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+curr_inode->indirect);
+	clr(curr_inode->indirect,temp->db_bitmap);
+	temp->no_used_blocks--;
+	int single_indirect_index =0;
+	while(blocks_taken>0 &&  single_indirect_index<64){
+		int *ptr = (int *)(file_system+single_indirect_offset+4*single_indirect_index);
+		clr(*ptr, temp->db_bitmap);
+		blocks_taken--;
+		single_indirect_index++;
+		temp->no_used_blocks--;
+	}
+	int double_indirect_offset = DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+curr_inode->doubly_indirect);
+	int double_indirect_index = 0;
+	clr(curr_inode->doubly_indirect,temp->db_bitmap);
+	temp->no_used_blocks--;
+	while(blocks_taken>0 && double_indirect_index<64){
+		int *single_indirect_block = (int *)(file_system+double_indirect_offset+4*double_indirect_index);
+		clr(*single_indirect_block,temp->db_bitmap);
+		temp->no_used_blocks--;
+		int single_indirect_offset = DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+*single_indirect_block);
+		int single_indirect_index =0;
+		while(blocks_taken>0 &&  single_indirect_index<64){
+			int *ptr = (int *)(file_system+single_indirect_offset+4*single_indirect_index);
+			clr(*ptr, temp->db_bitmap);
+			blocks_taken--;
+			single_indirect_index++;
+			temp->no_used_blocks--;
+		}
+		double_indirect_index++;
+	}
+	return 1;
+}
+
 int rm_myfs(char *filename){
-	
+	superblock * temp = (superblock *) file_system;
+	cout<<" blocks before delete 430 "<<temp->no_used_blocks<<endl;
+	int file_inode_no = get_file_inode(temp, filename);
+	if(file_inode_no==-1)
+		return -1;
+	int cwd=  temp->cwd;
+	int cwd_offset = DATABLOCK_SIZE*(temp->blocks_occupied+cwd);
+	inode * cwd_inode = (inode *)(file_system+cwd_offset);
+	int cwd_inode_file_count= cwd_inode->file_count;
+	int direct_block_index =0;
+	char* file_to_delete;
+	char* last_file_dir;
+	while(cwd_inode->direct[direct_block_index]!=-1){
+		int cwd_inode_db = cwd_inode->direct[direct_block_index];
+		int cwd_db_offset = DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+cwd_inode_db);
+		int db_index =0;
+		while(db_index<8 && cwd_inode_file_count>0){
+			//cout<<" Files name "<<file_system+cwd_db_offset+32*db_index<<
+			//" inode nume "<<*((short *)(file_system+cwd_db_offset+32*db_index+30))<<endl;
+			int file_inode_no=*((short *)(file_system+cwd_db_offset+32*db_index+30));
+			int inode_offset=DATABLOCK_SIZE*(temp->blocks_occupied+file_inode_no);
+			inode* curr_inode=(inode *)(file_system+inode_offset);
+			if(strcmp(file_system+cwd_db_offset+32*db_index, filename)==0){
+				file_to_delete=file_system+cwd_db_offset+32*db_index;
+				cout<<file_system+cwd_db_offset+32*db_index<<" 452 file to delete "<<endl;
+				remove_file_db(temp, curr_inode);
+				clr(file_inode_no, temp->inode_bitmap);
+				if(cwd_inode_file_count==1){
+					if(cwd_inode_file_count%8==1){
+						cwd_inode->direct[direct_block_index]=-1;
+					}
+					bzero(file_to_delete,32);
+					cwd_inode->file_count--;
+					return 1;
+				}
+
+				/*
+				Go through all data pointers of inode and clear them from bitmap
+				decrement total used blocks and total inode counter from superblock
+				write temp back
+
+				*/
+			}
+			if(cwd_inode_file_count==1){
+				last_file_dir=file_system+cwd_db_offset+32*db_index;
+				cout<<file_system+cwd_db_offset+32*db_index<<" 472 last file "<<endl;
+			}
+			db_index++;
+			cwd_inode_file_count--;	
+		}
+		direct_block_index++;
+	}
+	strncpy(file_to_delete,last_file_dir,32);
+	bzero(last_file_dir,32);
+	cwd_inode->file_count--;
+	cout<<" blocks after delete 484 "<<temp->no_used_blocks<<endl;
+	return 1;
 }
 
 
@@ -480,5 +580,10 @@ int main(){
 	cout<<showfile_myfs(a);
 
 	ls_myfs();
+	cout<<"Enter the file name :";
+	
+	cin>>a;
+	rm_myfs(a);
+	ls_myfs(); 	
 
 }
