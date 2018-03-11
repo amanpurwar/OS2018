@@ -20,6 +20,7 @@ using namespace std;
 #define debug 1
 
 char *file_system;
+struct tm * timeinfo;
 
 /*typedef struct{
 	char block[256];
@@ -197,9 +198,10 @@ int copy_pc2myfs(char *source, char *dest){
 				temp->no_used_blocks++;
 				data_offset = 256*(temp->blocks_occupied+MAX_INODES+next_empty_block);
 			}
+			parent_inode->file_count++;
 			char name[32];
 			strcpy(name, dest);
-			int *ptr = (int *)(name+30);
+			short *ptr = (short *)(name+30);
 			*ptr = next_empty_inode;
 			memcpy(file_system+data_offset,name,sizeof(name));
 			cout<<"184 "<<endl;
@@ -280,19 +282,6 @@ int copy_pc2myfs(char *source, char *dest){
 				}
 				// cout << file_system+indirect_block_offset+256 << endl;
 			}
-
-
-			/*
-			next empty < doubly 
-			double_index
-			while(double_inde && fread ){
-				singl idex 
-				....
-			}
-			single index ptr update in double_index block 
-
-	
-			*/
 			cout<<reading_left<<" reading_left 276\n";
 			if(reading_left>0){
 				int doubly_indirect_index =0;
@@ -352,15 +341,43 @@ int get_file_inode(superblock *temp, char *filename){
 		int cwd_db_offset = DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+cwd_inode_db);
 		int db_index =0;
 		int files_remaining = cwd_inode->file_count;
-		if(!curr_wd){
-			files_remaining++;
-		}else{
-			files_remaining+=2;
-		}
 		while(db_index<8 && files_remaining>0){
+			cout<<" Files name "<<file_system+cwd_db_offset+32*db_index<<
+			" inode nume "<<*((short *)(file_system+cwd_db_offset+32*db_index+30))<<endl;
 			if(!strcmp(filename,(file_system+cwd_db_offset+32*db_index))){
-				return *((int *)(file_system+cwd_db_offset+32*db_index+30));
+				return *((short *)(file_system+cwd_db_offset+32*db_index+30));
 			}
+			db_index++;
+			files_remaining--;	
+			
+		}
+		direct_block_index++;
+	}
+	return -1;
+	
+}
+
+
+int ls_myfs(){
+	superblock *temp = (superblock *)file_system;
+	int curr_wd=temp->cwd;
+	int cwd_inode_offset = 256*(temp->blocks_occupied+curr_wd);
+	inode *cwd_inode = (inode *)(file_system+cwd_inode_offset);
+	int direct_block_index =0;
+	while(cwd_inode->direct[direct_block_index]!=-1){
+		int cwd_inode_db = cwd_inode->direct[direct_block_index];
+		int cwd_db_offset = DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+cwd_inode_db);
+		int db_index =0;
+		int files_remaining = cwd_inode->file_count;
+		while(db_index<8 && files_remaining>0){
+			//cout<<" Files name "<<file_system+cwd_db_offset+32*db_index<<
+			//" inode nume "<<*((short *)(file_system+cwd_db_offset+32*db_index+30))<<endl;
+			int file_inode_no=*((short *)(file_system+cwd_db_offset+32*db_index+30));
+			int inode_offset=DATABLOCK_SIZE*(temp->blocks_occupied+file_inode_no);
+			inode* curr_inode=(inode *)(file_system+inode_offset);
+			timeinfo = localtime ( &curr_inode->last_modified );
+			cout<<curr_inode->access_permission<<" "<<curr_inode->owner<<" "<<curr_inode->file_size<<" "<< 
+			 file_system+cwd_db_offset+32*db_index << " "<<asctime(timeinfo);
 			db_index++;
 			files_remaining--;	
 		}
@@ -370,12 +387,17 @@ int get_file_inode(superblock *temp, char *filename){
 	
 }
 
+int rm_myfs(char *filename){
+	
+}
+
+
 int showfile_myfs(char *filename){
 	superblock *temp = (superblock *)file_system;
 	int file_inode_no = get_file_inode(temp, filename);
 	if(file_inode_no == -1)
 		return -1;
-	//cout << "371 " << file_inode << endl;
+	cout << "371 " << file_inode_no << endl;
 	inode * file_inode = (inode *)(file_system+DATABLOCK_SIZE*(temp->blocks_occupied+file_inode_no));
 	int files_read_rem = file_inode->file_size;
 	int direct_block_index = 0;
@@ -424,37 +446,17 @@ int showfile_myfs(char *filename){
 		int sing_ind_data_index = 0;
 		while(files_read_rem>0 && sing_ind_data_index<64){
 			int *db_index = (int *)(file_system+singly_indirect_db_offset+sing_ind_data_index*4);
-			//cout<<" block read from "<<*db_index<<endl;
 			int db_offset = DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+*db_index);
-			// buffer='\0';
 			buffer = (char *)malloc(min(files_read_rem,DATABLOCK_SIZE)*sizeof(char));
 			strncpy(buffer, file_system+db_offset, min(files_read_rem,DATABLOCK_SIZE));
-			//for(int i=0;i<256;i++)
-			//	cout << file_system[db_offset+i];
 			files_read_rem-= min(files_read_rem,DATABLOCK_SIZE);
 			cout <<files_read_rem<< " file rem \n "<< buffer;
 			sing_ind_data_index++;
-			
 		}
 
 	}
 	return 1;
 }
-
-
-/*typedef struct{
-	char *owner;
-	int file_type;
-	int file_size;
-	time_t last_modified;
-	time_t last_read;
-	time_t last_inode_modified;
-	int direct[8];
-	int indirect;
-	int doubly_indirect;
-	int access_permission;
-}inode;*/
-
 int main(){
 	int n;
 	printf("Enter size of file system in MB\n");
@@ -462,9 +464,21 @@ int main(){
 	int test = create_myfs(n);
 	cout << test<< endl;
 	cout<<"Enter the file name :";
-	char a[100];
+	char a[100],b[100];
+	int t =2;
 	cin>>a;
 	copy_pc2myfs(a,a);
 	showfile_myfs(a);
+	cout<<"Enter the file name :";
+	
+	cin>>b;
+	copy_pc2myfs(b,b);
+	showfile_myfs(b);
+	cout<<"Enter the file name :";
+	
+	cin>>a;
+	cout<<showfile_myfs(a);
+
+	ls_myfs();
 
 }
