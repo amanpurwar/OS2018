@@ -65,7 +65,7 @@ int get_next_empty_block(){
 	int i;
 	superblock* temp = (superblock*)file_system;
 	if(debug)
-		cout << "59 " << temp->total_blocks<< endl;
+		//cout << "59 " << temp->total_blocks<< endl;
 	for(i=0;i<temp->total_blocks;i++){
 		if(!test(i,temp->db_bitmap))
 			return i;
@@ -239,6 +239,7 @@ int copy_pc2myfs(char *source, char *dest){
 				if(read_size<256)
 					bzero(buffer+read_size,256-read_size);
 				next_empty_block = get_next_empty_block();
+				cout<<" block used "<<next_empty_block<<endl;
 				write_offset = 256*(temp->blocks_occupied+MAX_INODES+next_empty_block);
 				strcpy(file_system+write_offset, buffer);
 				newInode.direct[block_index] = next_empty_block;
@@ -265,6 +266,7 @@ int copy_pc2myfs(char *source, char *dest){
 					if(read_size<256)
 						bzero(buffer+read_size,256-read_size);
 					next_empty_block = get_next_empty_block();
+					cout<<" block used "<<next_empty_block;
 					temp->no_used_blocks++;
 					//read_size = read(fd,buffer, min(reading_left,256));
 					reading_left-=read_size;
@@ -274,7 +276,7 @@ int copy_pc2myfs(char *source, char *dest){
 					int *ptr=(int*)(file_system+indirect_block_offset+4*indirect_index);
 					*ptr=next_empty_block;
 					indirect_index++;
-					//cout<<"251 "<<write_offset<<" "<<buffer<<endl;
+					cout<<" 279 "<<write_offset<<" "<<endl;
 				}
 				// cout << file_system+indirect_block_offset+256 << endl;
 			}
@@ -304,6 +306,7 @@ int copy_pc2myfs(char *source, char *dest){
 					cout<<" 285 read_left "<<reading_left<<endl;
 					int indirect_index=0;
 					indirect_next_empty_block = get_next_empty_block();
+					cout<<" block used "<<next_empty_block<<endl;
 					temp->no_used_blocks++;
 					int indirect_block_offset = 256*(temp->blocks_occupied+MAX_INODES+indirect_next_empty_block);
 					setter(indirect_next_empty_block, temp->inode_bitmap);
@@ -376,10 +379,66 @@ int showfile_myfs(char *filename){
 	inode * file_inode = (inode *)(file_system+DATABLOCK_SIZE*(temp->blocks_occupied+file_inode_no));
 	int files_read_rem = file_inode->file_size;
 	int direct_block_index = 0;
+	char *buffer;
+	cout << filename << endl;
 	while(files_read_rem>0 && direct_block_index<8){
 		int db_index = file_inode->direct[direct_block_index];
+		cout<<" block read from "<<db_index<<endl;
 		int db_offset = DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+db_index);
+		//for(int i=0;i<256;i++)
+		//	cout << file_system[db_offset+i];
+		// buffer='\0';
+		buffer = (char *)malloc(min(files_read_rem,DATABLOCK_SIZE));
+		strncpy(buffer, file_system+db_offset,min(files_read_rem,DATABLOCK_SIZE) );
+		files_read_rem-=min(files_read_rem,DATABLOCK_SIZE);
+		cout <<files_read_rem<< " file rem \n " << buffer;
+		direct_block_index++;
+		
 	}
+	if(files_read_rem<=0)
+		return 1;
+	int singly_indirect_db_offset = DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+file_inode->indirect);
+	int sing_ind_data_index = 0;
+	while(files_read_rem>0 && sing_ind_data_index<64){
+		int *db_index = (int *)(file_system+singly_indirect_db_offset+sing_ind_data_index*4);
+		//cout<<" block read from "<<*db_index;
+		int db_offset = DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+*db_index);
+		//cout << " Reading offset " << db_offset << endl; 
+		// buffer='\0';
+		buffer = (char *)malloc(min(files_read_rem,DATABLOCK_SIZE)*sizeof(char));
+		strncpy(buffer, file_system+db_offset,min(files_read_rem,DATABLOCK_SIZE) );
+		//for(int i=0;i<256;i++)
+		//	cout << file_system[db_offset+i];
+		files_read_rem-=min(files_read_rem,DATABLOCK_SIZE);
+		cout <<files_read_rem<< " file rem \n " << buffer;
+		sing_ind_data_index++;
+		
+	}
+	if(files_read_rem<=0)
+		return 1;
+	int doubly_indirect_db_offset = DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+file_inode->doubly_indirect);
+	int doub_ind_data_index =0;
+	while(files_read_rem>0 && doub_ind_data_index<64){
+		int *doubly_sing_index = (int *)(file_system+doubly_indirect_db_offset+doub_ind_data_index*4);
+		int singly_indirect_db_offset = DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+*doubly_sing_index);
+		int sing_ind_data_index = 0;
+		while(files_read_rem>0 && sing_ind_data_index<64){
+			int *db_index = (int *)(file_system+singly_indirect_db_offset+sing_ind_data_index*4);
+			//cout<<" block read from "<<*db_index<<endl;
+			int db_offset = DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+*db_index);
+			// buffer='\0';
+			buffer = (char *)malloc(min(files_read_rem,DATABLOCK_SIZE)*sizeof(char));
+			strncpy(buffer, file_system+db_offset, min(files_read_rem,DATABLOCK_SIZE));
+			//for(int i=0;i<256;i++)
+			//	cout << file_system[db_offset+i];
+			files_read_rem-= min(files_read_rem,DATABLOCK_SIZE);
+			cout <<files_read_rem<< " file rem \n "<< buffer;
+			sing_ind_data_index++;
+			
+		}
+
+	}
+	return 1;
 }
 
 
