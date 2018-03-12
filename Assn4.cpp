@@ -229,86 +229,7 @@ int create_myfs (int size){
 		return 1;
 	}
 }
-int mkdir_myfs (char *dirname){
-	int new_dir_inode=get_next_empty_inode();
-	int new_dir_data_block=get_next_empty_block();
-	if(new_dir_inode==-1 ||new_dir_data_block==-1 ){
-		return -1;
-	}
-	// set bothe the inode and DB and increase the count 
-	superblock *temp = (superblock *)file_system;
-	setter(new_dir_inode,temp->inode_bitmap);
-	temp->inodes_in_use++;
-	setter(new_dir_data_block,temp->db_bitmap);
-	temp->no_used_blocks++;
-	int cwd=temp->cwd;
-	int cwd_offset=DATABLOCK_SIZE*(temp->blocks_occupied+cwd);
-	// updating the parent inode with the directory data
-	inode* parent_inode=(inode*)(file_system+cwd_offset);
-	int file_name_offset = (parent_inode->file_count)%8*32;
-	int last_entry_in_directory;
-	int j;
-	for(j=0;j<8;j++)
-	{
-		if(parent_inode->direct[j]==-1){
-			last_entry_in_directory = parent_inode->direct[j-1];
-			break;
-		}
 
-	}
-	if(debug){
-				cout<<"last_entry_in_directory "<<last_entry_in_directory<<endl;
-	}
-	int data_offset = DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+last_entry_in_directory)+file_name_offset;
-	if(debug){
-		cout<<" 173 "<<data_offset<<endl;
-	}
-	int next_empty_block;
-	if((parent_inode->file_count)%8==0){
-		next_empty_block = get_next_empty_block();
-		setter(next_empty_block, temp->db_bitmap);
-		parent_inode->direct[j]=next_empty_block;
-		temp->no_used_blocks++;
-		data_offset = DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+next_empty_block);
-	}
-	parent_inode->file_count++;
-	char name[32];
-	strcpy(name, dirname);
-	short *ptr = (short *)(name+30);
-	*ptr = new_dir_inode;
-	memcpy(file_system+data_offset,name,sizeof(name));
-	//update the new dir's inode with root and parent data
-	int inode_offset=DATABLOCK_SIZE*(temp->blocks_occupied+new_dir_inode);
-	inode * new_inode = (inode*)(file_system+inode_offset);
-	//new_inode->owner=(char*)malloc(30);
-	new_inode->file_type=1;
-	strncpy(new_inode->owner,parent_inode->owner,32);
-	time_t currTime;
-	time(&currTime);
-	new_inode->last_modified=currTime;
-	new_inode->last_read=currTime;
-	new_inode->file_size=DATABLOCK_SIZE;
-	new_inode->last_inode_modified=currTime;
-	new_inode->file_count=2; // beacuse used in ls it count . and .. as 2 file entries  convention as .. followed by . in the directory <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-	new_inode->access_permission=666;
-	new_inode->direct[0]=new_dir_data_block;
-	if(debug){
-		cout<<" 308 new inode number and new data block and cwd "<<new_dir_inode<<" "<<new_dir_data_block<<" "<<cwd<<endl;
-	}
-	// update the data block with . and ..
-	data_offset=DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+new_dir_data_block);
-	// first ..
-	strcpy(name, "..");
-	ptr = (short *)(name+30);
-	*ptr = cwd;
-	memcpy(file_system+data_offset,name,sizeof(name));
-	// then '.'
-	strcpy(name, ".");
-	ptr = (short *)(name+30);
-	*ptr = new_dir_inode;
-	memcpy(file_system+data_offset+32,name,sizeof(name));
-	return 1;
-}
 int copy_pc2myfs(char *source, char *dest){
 	int fd = open(source, O_RDONLY);
 
@@ -690,6 +611,104 @@ int copy_myfs2pc (char *source, char *dest){
 
 }
 
+int mkdir_myfs (char *dirname){
+	int new_dir_inode=get_next_empty_inode();
+	int new_dir_data_block=get_next_empty_block();
+	if(new_dir_inode==-1 ||new_dir_data_block==-1 ){
+		return -1;
+	}
+	// set bothe the inode and DB and increase the count 
+	superblock *temp = (superblock *)file_system;
+	setter(new_dir_inode,temp->inode_bitmap);
+	temp->inodes_in_use++;
+	setter(new_dir_data_block,temp->db_bitmap);
+	temp->no_used_blocks++;
+	int cwd=temp->cwd;
+	int cwd_offset=DATABLOCK_SIZE*(temp->blocks_occupied+cwd);
+	// updating the parent inode with the directory data
+	inode* parent_inode=(inode*)(file_system+cwd_offset);
+	int file_name_offset = (parent_inode->file_count)%8*32;
+	int last_entry_in_directory;
+	int j;
+	for(j=0;j<8;j++)
+	{
+		if(parent_inode->direct[j]==-1){
+			last_entry_in_directory = parent_inode->direct[j-1];
+			break;
+		}
+
+	}
+	if(debug){
+				cout<<"last_entry_in_directory "<<last_entry_in_directory<<endl;
+	}
+	int data_offset = DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+last_entry_in_directory)+file_name_offset;
+	if(debug){
+		cout<<" 173 "<<data_offset<<endl;
+	}
+	int next_empty_block;
+	if((parent_inode->file_count)%8==0){
+		next_empty_block = get_next_empty_block();
+		setter(next_empty_block, temp->db_bitmap);
+		parent_inode->direct[j]=next_empty_block;
+		temp->no_used_blocks++;
+		data_offset = DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+next_empty_block);
+	}
+	parent_inode->file_count++;
+	char name[32];
+	strcpy(name, dirname);
+	short *ptr = (short *)(name+30);
+	*ptr = new_dir_inode;
+	memcpy(file_system+data_offset,name,sizeof(name));
+	//update the new dir's inode with root and parent data
+	int inode_offset=DATABLOCK_SIZE*(temp->blocks_occupied+new_dir_inode);
+	inode * new_inode = (inode*)(file_system+inode_offset);
+	//new_inode->owner=(char*)malloc(30);
+	new_inode->file_type=1;
+	strncpy(new_inode->owner,parent_inode->owner,32);
+	time_t currTime;
+	time(&currTime);
+	new_inode->last_modified=currTime;
+	new_inode->last_read=currTime;
+	new_inode->file_size=DATABLOCK_SIZE;
+	new_inode->last_inode_modified=currTime;
+	new_inode->file_count=2; // beacuse used in ls it count . and .. as 2 file entries  convention as .. followed by . in the directory <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+	new_inode->access_permission=666;
+	new_inode->direct[0]=new_dir_data_block;
+	if(debug){
+		cout<<" 308 new inode number and new data block and cwd "<<new_dir_inode<<" "<<new_dir_data_block<<" "<<cwd<<endl;
+	}
+	// update the data block with . and ..
+	data_offset=DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+new_dir_data_block);
+	// first ..
+	strcpy(name, "..");
+	ptr = (short *)(name+30);
+	*ptr = cwd;
+	memcpy(file_system+data_offset,name,sizeof(name));
+	// then '.'
+	strcpy(name, ".");
+	ptr = (short *)(name+30);
+	*ptr = new_dir_inode;
+	memcpy(file_system+data_offset+32,name,sizeof(name));
+	return 1;
+}
+
+int chdir_myfs(char *dirname){
+	superblock *temp = (superblock *)file_system;
+	char *current = (char *)".";
+	if(strcmp(current,dirname)==0)
+	{
+		return 1;
+	}
+	else{
+		int newdir_inode = get_file_inode(temp, dirname);
+		if(newdir_inode==-1)
+			return -1;
+		temp->cwd = newdir_inode;
+		return 1;
+	}
+
+}
+
 
 int main(){
 	int n;
@@ -734,6 +753,9 @@ int main(){
 	cin>>a;
 	mkdir_myfs(a);
 	ls_myfs();
+	chdir_myfs(a);
+	superblock * temp = (superblock *)file_system;
+	cout << temp->cwd<< endl;
 
 
 }
