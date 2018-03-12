@@ -5,14 +5,15 @@
 #include <sys/stat.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include<iostream>
-#include<stdlib.h>
-#include<time.h>
+#include <iostream>
+#include <stdlib.h>
+#include <time.h>
 #include <unistd.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
 #include <pthread.h>
 #include <fcntl.h>
+#include <bits/stdc++.h>
 
 using namespace std;
 
@@ -21,7 +22,7 @@ using namespace std;
 #define MAX_INODES 32
 #define MAX_DATA_BLOCKS 4096*1024 // For 1GB file system size 
 #define DATABLOCK_SIZE 256
-#define debug 1
+#define debug 0
 
 char *file_system;
 struct tm * timeinfo;
@@ -47,7 +48,7 @@ typedef struct{
 }superblock;
 
 typedef struct{
-	char *owner;
+	char owner[32];
 	int file_type;
 	int file_size;
 	time_t last_modified;
@@ -190,7 +191,7 @@ int create_myfs (int size){
 		memcpy(file_system, &temp, sizeof(temp));
 		// Making root directory and inode
 		inode root;// = (inode*)(file_system+temp.blocks_occupied*256);
-		root.owner = (char *)"root";
+		strncpy(root.owner,"root", sizeof("root"));
 		root.file_type = 1; // Directory
 		root.file_size = DATABLOCK_SIZE;
 		root.file_count = 0;
@@ -279,9 +280,9 @@ int mkdir_myfs (char *dirname){
 	//update the new dir's inode with root and parent data
 	int inode_offset=DATABLOCK_SIZE*(temp->blocks_occupied+new_dir_inode);
 	inode * new_inode = (inode*)(file_system+inode_offset);
-	new_inode->owner=(char*)malloc(30);
+	//new_inode->owner=(char*)malloc(30);
 	new_inode->file_type=1;
-	strcpy(new_inode->owner,parent_inode->owner);
+	strncpy(new_inode->owner,parent_inode->owner,32);
 	time_t currTime;
 	time(&currTime);
 	new_inode->last_modified=currTime;
@@ -368,9 +369,9 @@ int copy_pc2myfs(char *source, char *dest){
 			// int newInodeNo= get_next_empty_inode();
 			inode newInode;
 			printf("%s\n",parent_inode->owner );
-			newInode.owner=(char*)malloc(30*sizeof(char));
+			//newInode.owner=(char*)malloc(30*sizeof(char));
 			newInode.access_permission=666;
-			strcpy(newInode.owner,parent_inode->owner);
+			strncpy(newInode.owner,parent_inode->owner,32);
 			// cout << "195 " << parent_inode->owner << endl;
 			// cout<<"188 "<<endl;
 			newInode.file_type=0;
@@ -597,7 +598,7 @@ int showfile_myfs(char *filename, int fd){
 	int file_inode_no = get_file_inode(temp, filename);
 	if(file_inode_no == -1)
 		return -1;
-	// cout << "371 " << file_inode_no << endl;
+	cout << "371 " << file_inode_no << endl;
 	inode * file_inode = (inode *)(file_system+DATABLOCK_SIZE*(temp->blocks_occupied+file_inode_no));
 	int files_read_rem = file_inode->file_size;
 	int direct_block_index = 0;
@@ -614,7 +615,7 @@ int showfile_myfs(char *filename, int fd){
 		strncpy(buffer, file_system+db_offset,min(files_read_rem,DATABLOCK_SIZE) );
 		
 		if(fd==-1){
-			// cout << buffer;
+			cout << buffer;
 		}
 		else
 			write(fd,buffer, min(files_read_rem,DATABLOCK_SIZE));
@@ -638,7 +639,7 @@ int showfile_myfs(char *filename, int fd){
 		//	cout << file_system[db_offset+i];
 		
 		if(fd==-1){
-			// cout << buffer;
+			 cout << buffer;
 		}
 		else
 			write(fd,buffer, min(files_read_rem,DATABLOCK_SIZE));
@@ -701,7 +702,7 @@ int main(){
 	int t =2;
 	cin>>a;
 	copy_pc2myfs(a,a);
-	showfile_myfs(a);
+	//showfile_myfs(a,-1);
 	t=2;
 	while(t--){
 		cout<<"Enter the file name :";
@@ -718,7 +719,8 @@ int main(){
 	
 	cout<<" enter to show ";
 	cin>>a;
-	showfile_myfs(a,-1);
+	n= showfile_myfs(a,-1);
+	cout << n << endl;
 	ls_myfs();
 
 	cout << "Enter file name to write" << endl;
@@ -728,7 +730,7 @@ int main(){
 	copy_myfs2pc(b,a);
 	ls_myfs();
 
-	cout<<" Enter the directoryt name "<<endl;
+	cout<<" Enter the directory name "<<endl;
 	cin>>a;
 	mkdir_myfs(a);
 	ls_myfs();
