@@ -86,7 +86,7 @@ int get_next_empty_inode(){
 
 int get_file_inode(superblock *temp, char *filename){
 	int curr_wd = temp->cwd;
-	int cwd_inode_offset = 256*(temp->blocks_occupied+curr_wd);
+	int cwd_inode_offset = DATABLOCK_SIZE*(temp->blocks_occupied+curr_wd);
 	inode *cwd_inode = (inode *)(file_system+cwd_inode_offset);
 	int direct_block_index =0;
 	while(cwd_inode->direct[direct_block_index]!=-1){
@@ -200,17 +200,17 @@ int create_myfs (int size){
 		if(debug){
 			// cout << "Line no 103 "<< next_empty_block << endl;
 		}
-		int offset = temp.blocks_occupied*256+MAX_INODES*256+256*next_empty_block+32*root.file_count;
+		int offset = DATABLOCK_SIZE*(temp.blocks_occupied+MAX_INODES+next_empty_block)+32*root.file_count;
 		char* data_pointer = file_system+offset;
 		char name[32] = {'.'};
 		int *ptr = (int *)(name+30);
-		*ptr = next_empty_block;
+		*ptr = 0;
 		strcpy(data_pointer,name);
 		root.file_count++;
 		for(int j=0;j<8;j++)
 			root.direct[j]=-1;
 		root.direct[0]= next_empty_block;
-		memcpy(file_system+temp.blocks_occupied*256, &root, sizeof(root));
+		memcpy(file_system+temp.blocks_occupied*DATABLOCK_SIZE, &root, sizeof(root));
 		superblock * temp2 = (superblock *)file_system;
 		// cout << "139 " << temp2->blocks_occupied << endl;
 		temp2->no_used_blocks++;
@@ -218,7 +218,7 @@ int create_myfs (int size){
 		setter(next_empty_block,temp2->db_bitmap);
 		setter(0, temp2->inode_bitmap);
 		//memcpy(file_system, &temp, sizeof(temp));
-		inode *res = (inode *)(file_system+temp.blocks_occupied*256);
+		inode *res = (inode *)(file_system+temp.blocks_occupied*DATABLOCK_SIZE);
 		// cout << "138 " << res->owner << endl;
 
 		return 1;
@@ -241,13 +241,13 @@ int copy_pc2myfs(char *source, char *dest){
 			setter(next_empty_inode, temp->inode_bitmap);
 			temp->inodes_in_use++;
 			int check_file_size = FdGetFileSize(fd);
-			if(check_file_size/256>(temp->total_blocks-temp->no_used_blocks)){
+			if(ceil((double)check_file_size/256.0)>(temp->total_blocks-temp->no_used_blocks)){
 				clr(next_empty_inode, temp->inode_bitmap);
 				return -1;
 			}
 			// cout << "161 " << temp->blocks_occupied << endl;
 			int curr_wd = temp->cwd;
-			int offset = 256*temp->blocks_occupied+256*curr_wd;
+			int offset = DATABLOCK_SIZE*(temp->blocks_occupied+curr_wd);
 			inode *parent_inode = (inode *)(file_system+offset);
 			int file_name_offset = (parent_inode->file_count)%8*32;
 			int last_entry_in_directory;
@@ -263,7 +263,7 @@ int copy_pc2myfs(char *source, char *dest){
 			if(debug){
 				// cout<<"last_entry_in_directory "<<last_entry_in_directory<<endl;
 			}
-			int data_offset = 256*temp->blocks_occupied+MAX_INODES*256+256*last_entry_in_directory+file_name_offset;
+			int data_offset = DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+last_entry_in_directory)+file_name_offset;
 			if(debug){
 				// cout<<" 173 "<<data_offset<<endl;
 			}
@@ -272,7 +272,7 @@ int copy_pc2myfs(char *source, char *dest){
 				setter(next_empty_block, temp->db_bitmap);
 				parent_inode->direct[j]=next_empty_block;
 				temp->no_used_blocks++;
-				data_offset = 256*(temp->blocks_occupied+MAX_INODES+next_empty_block);
+				data_offset = DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+next_empty_block);
 			}
 			parent_inode->file_count++;
 			char name[32];
@@ -281,7 +281,7 @@ int copy_pc2myfs(char *source, char *dest){
 			*ptr = next_empty_inode;
 			memcpy(file_system+data_offset,name,sizeof(name));
 			// cout<<"184 "<<endl;
-			int new_inode_offset= 256*temp->blocks_occupied+256*next_empty_inode;
+			int new_inode_offset= DATABLOCK_SIZE*(temp->blocks_occupied+next_empty_inode);
 			// int newInodeNo= get_next_empty_inode();
 			inode newInode;
 			printf("%s\n",parent_inode->owner );
@@ -304,22 +304,22 @@ int copy_pc2myfs(char *source, char *dest){
 			TO DO memcpy of newInode
 
 			*/
-			char *buffer = (char *)malloc(256*sizeof(char));
+			char *buffer = (char *)malloc(DATABLOCK_SIZE*sizeof(char));
 			int reading_left = newInode.file_size;
 			int no_of_blocks = ceil((double)newInode.file_size/256.0);
 			int block_index = 0;
 			int read_size;
 			int write_offset;
 			// cout<<"209 "<<endl;
-			while(block_index<8 && (read_size=read(fd,buffer,min(reading_left,256)))!=0){
+			while(block_index<8 && (read_size=read(fd,buffer,min(reading_left,DATABLOCK_SIZE)))!=0){
 				if(debug){
 					cout<<" 222 read _left "<<reading_left<<endl;
 				}
-				if(read_size<256)
-					bzero(buffer+read_size,256-read_size);
+				if(read_size<DATABLOCK_SIZE)
+					bzero(buffer+read_size,DATABLOCK_SIZE-read_size);
 				next_empty_block = get_next_empty_block();
 				// cout<<" block used "<<next_empty_block<<endl;
-				write_offset = 256*(temp->blocks_occupied+MAX_INODES+next_empty_block);
+				write_offset = DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+next_empty_block);
 				strcpy(file_system+write_offset, buffer);
 				newInode.direct[block_index] = next_empty_block;
 				block_index++;
@@ -339,17 +339,17 @@ int copy_pc2myfs(char *source, char *dest){
 				temp->no_used_blocks++;
 				//int arr[64];
 				newInode.indirect = next_empty_block;
-				int indirect_block_offset = 256*(temp->blocks_occupied+MAX_INODES+next_empty_block);
+				int indirect_block_offset = DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+next_empty_block);
 				setter(newInode.indirect,temp->db_bitmap);
-				while(indirect_index<64 && (read_size=read(fd,buffer,min(reading_left,256)))!=0){
-					if(read_size<256)
-						bzero(buffer+read_size,256-read_size);
+				while(indirect_index<64 && (read_size=read(fd,buffer,min(reading_left,DATABLOCK_SIZE)))!=0){
+					if(read_size<DATABLOCK_SIZE)
+						bzero(buffer+read_size,DATABLOCK_SIZE-read_size);
 					next_empty_block = get_next_empty_block();
 					// cout<<" block used "<<next_empty_block;
 					temp->no_used_blocks++;
 					//read_size = read(fd,buffer, min(reading_left,256));
 					reading_left-=read_size;
-					write_offset = 256*(temp->blocks_occupied+MAX_INODES+next_empty_block);
+					write_offset = DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+next_empty_block);
 					strcpy(file_system+write_offset, buffer);
 					setter(next_empty_block, temp->db_bitmap);
 					int *ptr=(int*)(file_system+indirect_block_offset+4*indirect_index);
@@ -365,7 +365,7 @@ int copy_pc2myfs(char *source, char *dest){
 				next_empty_block = get_next_empty_block();
 				temp->no_used_blocks++;
 				newInode.doubly_indirect = next_empty_block;
-				int doubly_indirect_offset = 256*(temp->blocks_occupied+MAX_INODES+next_empty_block);
+				int doubly_indirect_offset = DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+next_empty_block);
 				setter(newInode.doubly_indirect,temp->db_bitmap);
 				int indirect_next_empty_block;
 				while(doubly_indirect_index < 64 && reading_left>0){
@@ -374,16 +374,16 @@ int copy_pc2myfs(char *source, char *dest){
 					indirect_next_empty_block = get_next_empty_block();
 					// cout<<" block used "<<next_empty_block<<endl;
 					temp->no_used_blocks++;
-					int indirect_block_offset = 256*(temp->blocks_occupied+MAX_INODES+indirect_next_empty_block);
+					int indirect_block_offset = DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+indirect_next_empty_block);
 					setter(indirect_next_empty_block, temp->inode_bitmap);
-					while(indirect_index<64 && (read_size=read(fd,buffer,min(reading_left,256)))!=0){
-						if(read_size<256)
-							bzero(buffer+read_size,256-read_size);
+					while(indirect_index<64 && (read_size=read(fd,buffer,min(reading_left,DATABLOCK_SIZE)))!=0){
+						if(read_size<DATABLOCK_SIZE)
+							bzero(buffer+read_size,DATABLOCK_SIZE-read_size);
 						next_empty_block = get_next_empty_block();
 						temp->no_used_blocks++;
 						//read_size = read(fd,buffer, min(reading_left,256));
 						reading_left-=read_size;
-						write_offset = 256*(temp->blocks_occupied+MAX_INODES+next_empty_block);
+						write_offset = DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+next_empty_block);
 						strcpy(file_system+write_offset, buffer);
 						setter(next_empty_block, temp->db_bitmap);
 						int *ptr=(int*)(file_system+indirect_block_offset+4*indirect_index);
@@ -414,7 +414,7 @@ int copy_pc2myfs(char *source, char *dest){
 int ls_myfs(){
 	superblock *temp = (superblock *)file_system;
 	int curr_wd=temp->cwd;
-	int cwd_inode_offset = 256*(temp->blocks_occupied+curr_wd);
+	int cwd_inode_offset = DATABLOCK_SIZE*(temp->blocks_occupied+curr_wd);
 	inode *cwd_inode = (inode *)(file_system+cwd_inode_offset);
 	int direct_block_index =0;
 	int files_remaining = cwd_inode->file_count;
@@ -618,7 +618,7 @@ int main(){
 	cin>>a;
 	copy_pc2myfs(a,a);
 	//showfile_myfs(a);
-	t=3;
+	t=11;
 	while(t--){
 		cout<<"Enter the file name :";
 		cin>>a;
