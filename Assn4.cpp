@@ -101,8 +101,8 @@ int get_file_inode(superblock *temp, char *filename){
 		int db_index =0;
 		
 		while(db_index<8 && files_remaining>0){
-			// cout<<" Files name "<<file_system+cwd_db_offset+32*db_index<<
-			// " inode nume "<<*((short *)(file_system+cwd_db_offset+32*db_index+30))<<endl;
+			 cout<<" Files name "<<file_system+cwd_db_offset+32*db_index<<
+			 " inode nume "<<*((short *)(file_system+cwd_db_offset+32*db_index+30))<<endl;
 			if(!strcmp(filename,(file_system+cwd_db_offset+32*db_index))){
 				return *((short *)(file_system+cwd_db_offset+32*db_index+30));
 			}
@@ -425,18 +425,20 @@ int copy_pc2myfs(char *source, char *dest){
 int ls_myfs(){
 	superblock *temp = (superblock *)file_system;
 	int curr_wd=temp->cwd;
+	cout << "Current wd 428 " << curr_wd << endl;
 	int cwd_inode_offset = DATABLOCK_SIZE*(temp->blocks_occupied+curr_wd);
 	inode *cwd_inode = (inode *)(file_system+cwd_inode_offset);
 	int direct_block_index =0;
 	int files_remaining = cwd_inode->file_count;
+	cout << "files_remaining " << files_remaining << endl;
 	while(cwd_inode->direct[direct_block_index]!=-1){
 		int cwd_inode_db = cwd_inode->direct[direct_block_index];
 		int cwd_db_offset = DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+cwd_inode_db);
 		int db_index =0;
 		
 		while(db_index<8 && files_remaining>0){
-			//cout<<" Files name "<<file_system+cwd_db_offset+32*db_index<<
-			//" inode nume "<<*((short *)(file_system+cwd_db_offset+32*db_index+30))<<endl;
+			cout<<" In ls Files name "<<file_system+cwd_db_offset+32*db_index<<
+			" inode nume "<<*((short *)(file_system+cwd_db_offset+32*db_index+30))<<endl;
 			int file_inode_no=*((short *)(file_system+cwd_db_offset+32*db_index+30));
 			int inode_offset=DATABLOCK_SIZE*(temp->blocks_occupied+file_inode_no);
 			inode* curr_inode=(inode *)(file_system+inode_offset);
@@ -457,6 +459,7 @@ int rm_myfs(char *filename){
 	superblock * temp = (superblock *) file_system;
 	// cout<<" blocks before delete 430 "<<temp->no_used_blocks<<endl;
 	int file_inode_no = get_file_inode(temp, filename);
+	cout << "460 "<< file_inode_no << endl;
 	if(file_inode_no==-1)
 		return -1;
 	int cwd=  temp->cwd;
@@ -605,7 +608,7 @@ int showfile_myfs(char *filename, int fd){
 
 
 int copy_myfs2pc (char *source, char *dest){
-	int fd = creat(dest, 666);
+	int fd = creat(dest, 0666);
 	int n = showfile_myfs(source, fd);
 	if(n==-1)
 		return -1;
@@ -714,6 +717,48 @@ int chdir_myfs(char *dirname){
 
 }
 
+int rmdir_myfs(char *dirname){
+	superblock *temp = (superblock *)file_system;
+	int dir_inode = get_file_inode(temp, dirname);
+	if(dir_inode==-1)
+		return -1;
+	int cwd = temp->cwd;
+	int temp_cwd = dir_inode;
+	temp->cwd = temp_cwd;
+	int dir_inode_offset = DATABLOCK_SIZE*(temp->blocks_occupied+dir_inode);
+	inode * to_be_del_dir = (inode *)(file_system+ dir_inode_offset);
+	char buffer[32];
+	int direct_block_index =0;
+	int files_remaining = to_be_del_dir->file_count;
+	while(to_be_del_dir->direct[direct_block_index]!=-1){
+		int to_be_del_dir_db =to_be_del_dir->direct[direct_block_index];
+		int to_be_del_dir_db_offset = DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+to_be_del_dir_db);
+		int db_index =0;
+		
+		while(db_index<8 && files_remaining>0){
+
+			strncpy(buffer,file_system+to_be_del_dir_db_offset+32*db_index,30);
+			char *dot = (char *)".";
+			char *double_dot = (char *)"..";
+			if(strcmp(buffer,dot)==0 || strcmp(buffer,double_dot)==0){
+				db_index++;
+				files_remaining--;
+				continue;
+			}
+			cout << "735 remove hoye jaa" << rm_myfs(buffer)<<" "<< buffer << endl;
+			//" inode nume "<<*((short *)(file_system+cwd_db_offset+32*db_index+30))<<endl;
+			//int file_inode_no=*((short *)(file_system+cwd_db_offset+32*db_index+30));
+			db_index++;
+			files_remaining--;	
+		}
+		direct_block_index++;
+	}
+	temp->cwd = cwd;
+	cout << "back to parent " << temp->cwd << endl;
+	cout << "752 remove directory final " << rm_myfs(dirname)<<endl;
+	return 1;
+}
+
 
 int main(){
 	int n;
@@ -771,6 +816,13 @@ int main(){
 	cin >> a;
 	chdir_myfs(a);
 	ls_myfs();
+	cout << "Enter directory to be deleted\n";
+	cin >> a;
+	rmdir_myfs(a);
+	ls_myfs();
+	cout << "Enter file to show\n";
+	cin >> a;
+	showfile_myfs(a,-1);
 
 
 }
