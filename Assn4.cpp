@@ -123,12 +123,14 @@ int remove_file_db(superblock * temp, inode* curr_inode){
 	while(blocks_taken>0 && direct_db_index<8 ){
 		int db_index = curr_inode->direct[direct_db_index];
 		clr(db_index, temp->db_bitmap);
+		curr_inode->direct[direct_db_index] =-1;
 		direct_db_index++;
 		blocks_taken--;
 		temp->no_used_blocks--;
 	}
 	int single_indirect_offset = DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+curr_inode->indirect);
 	clr(curr_inode->indirect,temp->db_bitmap);
+	curr_inode->indirect = -1;
 	temp->no_used_blocks--;
 	int single_indirect_index =0;
 	while(blocks_taken>0 &&  single_indirect_index<64){
@@ -141,6 +143,7 @@ int remove_file_db(superblock * temp, inode* curr_inode){
 	int double_indirect_offset = DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+curr_inode->doubly_indirect);
 	int double_indirect_index = 0;
 	clr(curr_inode->doubly_indirect,temp->db_bitmap);
+	curr_inode->doubly_indirect = -1;
 	temp->no_used_blocks--;
 	while(blocks_taken>0 && double_indirect_index<64){
 		int *single_indirect_block = (int *)(file_system+double_indirect_offset+4*double_indirect_index);
@@ -756,12 +759,14 @@ int main(){
 	mkdir_myfs(a);
 	ls_myfs();
 	chdir_myfs(a);
+	ls_myfs();
 	superblock * temp = (superblock *)file_system;
 	cout << temp->cwd<< endl;
 	cout << "Enter file to transfer" << endl;
 	cin >> a;
 	copy_pc2myfs(a,a);
 	ls_myfs();
+	showfile_myfs(a,-1);
 	cout << "change directory" << endl;
 	cin >> a;
 	chdir_myfs(a);
