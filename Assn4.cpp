@@ -94,11 +94,12 @@ int get_file_inode(superblock *temp, char *filename){
 	int cwd_inode_offset = DATABLOCK_SIZE*(temp->blocks_occupied+curr_wd);
 	inode *cwd_inode = (inode *)(file_system+cwd_inode_offset);
 	int direct_block_index =0;
+	int files_remaining = cwd_inode->file_count;
 	while(cwd_inode->direct[direct_block_index]!=-1){
 		int cwd_inode_db = cwd_inode->direct[direct_block_index];
 		int cwd_db_offset = DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+cwd_inode_db);
 		int db_index =0;
-		int files_remaining = cwd_inode->file_count;
+		
 		while(db_index<8 && files_remaining>0){
 			// cout<<" Files name "<<file_system+cwd_db_offset+32*db_index<<
 			// " inode nume "<<*((short *)(file_system+cwd_db_offset+32*db_index+30))<<endl;
@@ -252,6 +253,7 @@ int copy_pc2myfs(char *source, char *dest){
 			temp->inodes_in_use++;
 			// cout << "161 " << temp->blocks_occupied << endl;
 			int curr_wd = temp->cwd;
+			cout << "255 " << curr_wd << endl;
 			int offset = DATABLOCK_SIZE*(temp->blocks_occupied+curr_wd);
 			inode *parent_inode = (inode *)(file_system+offset);
 			int file_name_offset = (parent_inode->file_count)%8*32;
@@ -756,6 +758,14 @@ int main(){
 	chdir_myfs(a);
 	superblock * temp = (superblock *)file_system;
 	cout << temp->cwd<< endl;
+	cout << "Enter file to transfer" << endl;
+	cin >> a;
+	copy_pc2myfs(a,a);
+	ls_myfs();
+	cout << "change directory" << endl;
+	cin >> a;
+	chdir_myfs(a);
+	ls_myfs();
 
 
 }
