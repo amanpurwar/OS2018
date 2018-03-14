@@ -101,8 +101,8 @@ int get_file_inode(superblock *temp, char *filename){
 		int db_index =0;
 		
 		while(db_index<8 && files_remaining>0){
-			 cout<<" Files name "<<file_system+cwd_db_offset+32*db_index<<
-			 " inode nume "<<*((short *)(file_system+cwd_db_offset+32*db_index+30))<<endl;
+			 //cout<<" Files name "<<file_system+cwd_db_offset+32*db_index<<
+			 //" inode nume "<<*((short *)(file_system+cwd_db_offset+32*db_index+30))<<endl;
 			if(!strcmp(filename,(file_system+cwd_db_offset+32*db_index))){
 				return *((short *)(file_system+cwd_db_offset+32*db_index+30));
 			}
@@ -199,7 +199,7 @@ int create_myfs (int size){
 		root.file_type = 1; // Directory
 		root.file_size = DATABLOCK_SIZE;
 		root.file_count = 0;
-		root.access_permission=666;
+		root.access_permission=0666;
 		time_t timer;
 		time(&timer);
 		root.last_modified = timer;
@@ -256,7 +256,7 @@ int copy_pc2myfs(char *source, char *dest){
 			temp->inodes_in_use++;
 			// cout << "161 " << temp->blocks_occupied << endl;
 			int curr_wd = temp->cwd;
-			cout << "255 " << curr_wd << endl;
+			//cout << "255 " << curr_wd << endl;
 			int offset = DATABLOCK_SIZE*(temp->blocks_occupied+curr_wd);
 			inode *parent_inode = (inode *)(file_system+offset);
 			int file_name_offset = (parent_inode->file_count)%8*32;
@@ -296,7 +296,7 @@ int copy_pc2myfs(char *source, char *dest){
 			inode newInode;
 			printf("%s\n",parent_inode->owner );
 			//newInode.owner=(char*)malloc(30*sizeof(char));
-			newInode.access_permission=666;
+			newInode.access_permission=0666;
 			strncpy(newInode.owner,parent_inode->owner,32);
 			// cout << "195 " << parent_inode->owner << endl;
 			// cout<<"188 "<<endl;
@@ -425,22 +425,22 @@ int copy_pc2myfs(char *source, char *dest){
 int ls_myfs(){
 	superblock *temp = (superblock *)file_system;
 	int curr_wd=temp->cwd;
-	cout << "Current wd 428 " << curr_wd << endl;
+	//cout << "Current wd 428 " << curr_wd << endl;
 	int cwd_inode_offset = DATABLOCK_SIZE*(temp->blocks_occupied+curr_wd);
 	inode *cwd_inode = (inode *)(file_system+cwd_inode_offset);
 	int direct_block_index =0;
 	int files_remaining = cwd_inode->file_count;
-	cout << "files_remaining " << files_remaining << endl;
+	//cout << "files_remaining " << files_remaining << endl;
 	while(cwd_inode->direct[direct_block_index]!=-1){
 		int cwd_inode_db = cwd_inode->direct[direct_block_index];
 		int cwd_db_offset = DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+cwd_inode_db);
 		int db_index =0;
 		
 		while(db_index<8 && files_remaining>0){
-			cout<<" In ls Files name "<<file_system+cwd_db_offset+32*db_index<<
-			" inode nume "<<*((short *)(file_system+cwd_db_offset+32*db_index+30))<<endl;
-			int file_inode_no=*((short *)(file_system+cwd_db_offset+32*db_index+30));
-			int inode_offset=DATABLOCK_SIZE*(temp->blocks_occupied+file_inode_no);
+			//cout<<" In ls Files name "<<file_system+cwd_db_offset+32*db_index<<
+			//" inode nume "<<*((short *)(file_system+cwd_db_offset+32*db_index+30))<<endl;
+			short* file_inode_no=((short *)(file_system+cwd_db_offset+32*db_index+30));
+			int inode_offset=DATABLOCK_SIZE*(temp->blocks_occupied+*file_inode_no);
 			inode* curr_inode=(inode *)(file_system+inode_offset);
 			timeinfo = localtime ( &curr_inode->last_modified );
 			cout<<curr_inode->access_permission<<" "<<curr_inode->owner<<" "<<curr_inode->file_size<<" "<< 
@@ -459,7 +459,7 @@ int rm_myfs(char *filename){
 	superblock * temp = (superblock *) file_system;
 	// cout<<" blocks before delete 430 "<<temp->no_used_blocks<<endl;
 	int file_inode_no = get_file_inode(temp, filename);
-	cout << "460 "<< file_inode_no << endl;
+	//cout << "460 "<< file_inode_no << endl;
 	if(file_inode_no==-1)
 		return -1;
 	int cwd=  temp->cwd;
@@ -476,14 +476,14 @@ int rm_myfs(char *filename){
 		while(db_index<8 && cwd_inode_file_count>0){
 			//cout<<" Files name "<<file_system+cwd_db_offset+32*db_index<<
 			//" inode nume "<<*((short *)(file_system+cwd_db_offset+32*db_index+30))<<endl;
-			int file_inode_no=*((short *)(file_system+cwd_db_offset+32*db_index+30));
-			int inode_offset=DATABLOCK_SIZE*(temp->blocks_occupied+file_inode_no);
+			short* file_inode_no=((short *)(file_system+cwd_db_offset+32*db_index+30));
+			int inode_offset=DATABLOCK_SIZE*(temp->blocks_occupied+*file_inode_no);
 			inode* curr_inode=(inode *)(file_system+inode_offset);
 			if(strcmp(file_system+cwd_db_offset+32*db_index, filename)==0){
 				file_to_delete=cwd_db_offset+32*db_index;
 				// cout<<file_system+cwd_db_offset+32*db_index<<" 452 file to delete "<<endl;
 				remove_file_db(temp, curr_inode);
-				clr(file_inode_no, temp->inode_bitmap);
+				clr((int)(*file_inode_no), temp->inode_bitmap);
 				temp->inodes_in_use--;
 				if(cwd_inode_file_count==1){
 					if(cwd_inode->file_count%8==1){
@@ -527,7 +527,7 @@ int showfile_myfs(char *filename, int fd){
 	int file_inode_no = get_file_inode(temp, filename);
 	if(file_inode_no == -1)
 		return -1;
-	cout << "371 " << file_inode_no << endl;
+	//cout << "371 " << file_inode_no << endl;
 	inode * file_inode = (inode *)(file_system+DATABLOCK_SIZE*(temp->blocks_occupied+file_inode_no));
 	int files_read_rem = file_inode->file_size;
 	int direct_block_index = 0;
@@ -720,6 +720,7 @@ int chdir_myfs(char *dirname){
 int rmdir_myfs(char *dirname){
 	superblock *temp = (superblock *)file_system;
 	int dir_inode = get_file_inode(temp, dirname);
+	cout << "723 directory " << dir_inode << endl;
 	if(dir_inode==-1)
 		return -1;
 	int cwd = temp->cwd;
@@ -730,6 +731,7 @@ int rmdir_myfs(char *dirname){
 	char buffer[32];
 	int direct_block_index =0;
 	int files_remaining = to_be_del_dir->file_count;
+	cout << "734 files in delete wala directory = " << files_remaining << endl;
 	while(to_be_del_dir->direct[direct_block_index]!=-1){
 		int to_be_del_dir_db =to_be_del_dir->direct[direct_block_index];
 		int to_be_del_dir_db_offset = DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+to_be_del_dir_db);
@@ -745,6 +747,7 @@ int rmdir_myfs(char *dirname){
 				files_remaining--;
 				continue;
 			}
+			//rm_myfs(buffer) << endl;
 			cout << "735 remove hoye jaa" << rm_myfs(buffer)<<" "<< buffer << endl;
 			//" inode nume "<<*((short *)(file_system+cwd_db_offset+32*db_index+30))<<endl;
 			//int file_inode_no=*((short *)(file_system+cwd_db_offset+32*db_index+30));
