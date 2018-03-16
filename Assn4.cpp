@@ -26,6 +26,7 @@ using namespace std;
 
 char *file_system;
 struct tm * timeinfo;
+int file_system_size;
 
 /*typedef struct{
 	char block[256];
@@ -175,6 +176,7 @@ int create_myfs (int size){
 		/*int *ptr = (int*)file_system;
 		*ptr = size;
 		*(ptr+4) = */
+		bzero(file_system, size*1024*1024);
 		superblock temp;
 		//temp = (superblock *)file_system;
 		temp.size = size;
@@ -427,20 +429,20 @@ int copy_pc2myfs(char *source, char *dest){
 int ls_myfs(){
 	superblock *temp = (superblock *)file_system;
 	int curr_wd=temp->cwd;
-	//cout << "Current wd 428 " << curr_wd << endl;
+	cout << "Current wd 428 " << curr_wd << endl;
 	int cwd_inode_offset = DATABLOCK_SIZE*(temp->blocks_occupied+curr_wd);
 	inode *cwd_inode = (inode *)(file_system+cwd_inode_offset);
 	int direct_block_index =0;
 	int files_remaining = cwd_inode->file_count;
-	//cout << "files_remaining " << files_remaining << endl;
+	cout << "files_remaining " << files_remaining << endl;
 	while(cwd_inode->direct[direct_block_index]!=-1){
 		int cwd_inode_db = cwd_inode->direct[direct_block_index];
 		int cwd_db_offset = DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+cwd_inode_db);
 		int db_index =0;
 		
 		while(db_index<8 && files_remaining>0){
-			// cout<<" In ls Files name "<<file_system+cwd_db_offset+32*db_index<<
-			// " inode nume "<<*((short *)(file_system+cwd_db_offset+32*db_index+30))<<endl;
+			 cout<<" In ls Files name "<<file_system+cwd_db_offset+32*db_index<<
+			 " inode nume "<<*((short *)(file_system+cwd_db_offset+32*db_index+30))<<endl;
 			short* file_inode_no=((short *)(file_system+cwd_db_offset+32*db_index+30));
 			int inode_offset=DATABLOCK_SIZE*(temp->blocks_occupied+*file_inode_no);
 			inode* curr_inode=(inode *)(file_system+inode_offset);
@@ -774,6 +776,98 @@ int rmdir_myfs(char *dirname){
 	return 1;
 }
 
+int open_myfs(char *filename, int mode){
+	superblock *temp = (superblock *)file_system;
+}
+
+int dump_myfs( char * dumpfile){
+	int fd = creat(dumpfile, 0666);
+	if(fd ==-1)
+		return -1;
+	superblock *temp = (superblock *)file_system;
+	if(write(fd, temp, sizeof(superblock))==-1){
+		cout << "789 superblock" << endl;
+		return -1;
+	}
+	if(write(fd,temp,temp->blocks_occupied*DATABLOCK_SIZE-sizeof(superblock))==-1){
+		return -1;
+	}
+	int i;
+	int inode_offset;
+	for(i=0;i<MAX_INODES;i++){
+		inode_offset = DATABLOCK_SIZE*(temp->blocks_occupied+i);
+		inode * inode_det = (inode *)(file_system+inode_offset);
+		if(write(fd, inode_det, DATABLOCK_SIZE*sizeof(char))==-1)
+			return -1;
+	}
+	inode_offset+=DATABLOCK_SIZE;
+	if(write(fd, file_system+inode_offset, file_system_size*1024*1024-DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES))==-1)
+		return -1;
+	return 1;
+	/*int fd = creat(dumpfile, 0666);
+	if(fd ==-1)
+		return -1;
+	if(write(fd, file_system, file_system_size*1024*1024)==-1)
+		return -1;
+	return 1;*/
+}
+
+int restore_myfs(char *dumpfile){
+	int fd = open(dumpfile, O_RDONLY);
+	if(fd==-1){
+		cout << "Fd khul gaya" << endl;
+		return -1;
+	}
+	int fileSize = FdGetFileSize(fd);
+	cout << "796 " << 10*1024*1024 << endl;
+	cout << "797 " << fileSize << endl;
+	file_system = (char *)malloc(fileSize*sizeof(char));
+	superblock *temp= (superblock *)malloc(sizeof(superblock));
+	if(read(fd, temp, sizeof(superblock))==-1){
+		cout << "Temp chal raha kya ? " << endl;
+		return -1;
+	}
+	memcpy(file_system, temp, sizeof(superblock));
+	cout << temp->no_used_blocks<<endl;
+	int i;
+	int file_system_offset;
+	
+	cout << "Hello hello "<< temp->blocks_occupied*DATABLOCK_SIZE << " " << sizeof(superblock)<< endl;
+	//fd = fd+temp->blocks_occupied*DATABLOCK_SIZE-sizeof(superblock);
+	int temp_read_size = temp->blocks_occupied*DATABLOCK_SIZE-sizeof(superblock);
+	char *temp_read = (char *)malloc(temp_read_size*sizeof(char));
+	read(fd, temp_read, temp_read_size);
+	for(i=0;i< MAX_INODES;i++){
+		file_system_offset = DATABLOCK_SIZE*(temp->blocks_occupied+i);
+		inode * inode_det = (inode *)malloc(sizeof(inode));
+		//bzero(inode_det, sizeof(inode));
+		if(read(fd, inode_det, sizeof(inode))==-1){
+			cout << "inode padh raha " << endl;
+			return -1;
+		}
+		cout << inode_det->file_size <<" "<<i<< endl;
+		temp_read_size=DATABLOCK_SIZE-sizeof(inode);
+		temp_read = (char *)malloc(temp_read_size*sizeof(char));
+		read(fd,temp_read,temp_read_size*sizeof(char));
+		memcpy(file_system+file_system_offset, inode_det, sizeof(inode));
+	}
+	// for(i=0;i<MAX_INODES;i++){
+	// 	cout<<" 844 ";
+	// 	cout<<test(i,temp->db_bitmap)<<" "<<test(i,temp->inode_bitmap)<<endl;
+	// }size
+	int datablockSize = fileSize-DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES);
+	char *datablocks = (char *)malloc(datablockSize*sizeof(char));
+	if(read(fd, datablocks, datablockSize)==-1)
+		return -1;
+	// for(i=0;i<datablockSize;i++){
+	// 	cout<<datablocks[i];
+	// }
+	file_system_offset = file_system_offset+DATABLOCK_SIZE;
+	memcpy(file_system+file_system_offset, datablocks, sizeof(datablockSize));
+	cout << temp->no_used_blocks << endl;
+	return 1;
+}
+
 
 int main(){
 	int n=0,t,p,q;
@@ -786,6 +880,7 @@ int main(){
 			case 1:
 				cout<<"Enter file size :";
 				cin>>t;
+				file_system_size = t;
 				cout<<create_myfs(t);
 				break;
 			case 2:
@@ -827,6 +922,16 @@ int main(){
 				cout<<"Enter the dir to delete to  :";
 				cin>>src;
 				cout<<rmdir_myfs(src);
+				break;
+			case 15:
+				cout << "Enter file to dump on :";
+				cin >> src;
+				cout << dump_myfs(src);
+				break;
+			case 16:
+				cout << "Enter file to restore from :";
+				cin >> src;
+				cout << restore_myfs(src);
 				break;
 			default:
 				cout<<" abhi implement nahi hua hai babua \n";
