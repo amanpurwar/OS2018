@@ -26,8 +26,8 @@ using namespace std;
 
 char *file_system;
 struct tm * timeinfo;
-int file_system_size;
 
+int file_system_size;
 int max_fd; 
 
 typedef struct{
@@ -141,7 +141,6 @@ int remove_file_db(superblock * temp, inode* curr_inode){
 		temp->no_used_blocks--;
 	}
 	int single_indirect_offset = DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+curr_inode->indirect);
-	clr(curr_inode->indirect,temp->db_bitmap);
 	curr_inode->indirect = -1;
 	temp->no_used_blocks--;
 	int single_indirect_index =0;
@@ -152,9 +151,9 @@ int remove_file_db(superblock * temp, inode* curr_inode){
 		single_indirect_index++;
 		temp->no_used_blocks--;
 	}
+	clr(curr_inode->indirect,temp->db_bitmap);
 	int double_indirect_offset = DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+curr_inode->doubly_indirect);
 	int double_indirect_index = 0;
-	clr(curr_inode->doubly_indirect,temp->db_bitmap);
 	curr_inode->doubly_indirect = -1;
 	temp->no_used_blocks--;
 	while(blocks_taken>0 && double_indirect_index<64){
@@ -172,6 +171,7 @@ int remove_file_db(superblock * temp, inode* curr_inode){
 		}
 		double_indirect_index++;
 	}
+	clr(curr_inode->doubly_indirect,temp->db_bitmap);
 	// cout<<" out 164 "<<endl;
 	return 1;
 }
@@ -186,7 +186,6 @@ int create_myfs (int size){
 		/*int *ptr = (int*)file_system;
 		*ptr = size;
 		*(ptr+4) = */
-		bzero(file_system, size*1024*1024);
 		superblock temp;
 		//temp = (superblock *)file_system;
 		temp.size = size;
@@ -439,20 +438,20 @@ int copy_pc2myfs(char *source, char *dest){
 int ls_myfs(){
 	superblock *temp = (superblock *)file_system;
 	int curr_wd=temp->cwd;
-	cout << "Current wd 428 " << curr_wd << endl;
+	//cout << "Current wd 428 " << curr_wd << endl;
 	int cwd_inode_offset = DATABLOCK_SIZE*(temp->blocks_occupied+curr_wd);
 	inode *cwd_inode = (inode *)(file_system+cwd_inode_offset);
 	int direct_block_index =0;
 	int files_remaining = cwd_inode->file_count;
-	cout << "files_remaining " << files_remaining << endl;
+	//cout << "files_remaining " << files_remaining << endl;
 	while(cwd_inode->direct[direct_block_index]!=-1){
 		int cwd_inode_db = cwd_inode->direct[direct_block_index];
 		int cwd_db_offset = DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+cwd_inode_db);
 		int db_index =0;
 		
 		while(db_index<8 && files_remaining>0){
-			 cout<<" In ls Files name "<<file_system+cwd_db_offset+32*db_index<<
-			 " inode nume "<<*((short *)(file_system+cwd_db_offset+32*db_index+30))<<endl;
+			// cout<<" In ls Files name "<<file_system+cwd_db_offset+32*db_index<<
+			// " inode nume "<<*((short *)(file_system+cwd_db_offset+32*db_index+30))<<endl;
 			short* file_inode_no=((short *)(file_system+cwd_db_offset+32*db_index+30));
 			int inode_offset=DATABLOCK_SIZE*(temp->blocks_occupied+*file_inode_no);
 			inode* curr_inode=(inode *)(file_system+inode_offset);
@@ -703,6 +702,10 @@ int mkdir_myfs (char *dirname){
 	new_inode->file_count=2; // beacuse used in ls it count . and .. as 2 file entries  convention as .. followed by . in the directory <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 	new_inode->access_permission=666;
 	new_inode->direct[0]=new_dir_data_block;
+	int i;
+	for(i=1;i<8;i++){
+		new_inode->direct[i]= -1;
+	}
 	if(debug){
 		cout<<" 308 new inode number and new data block and cwd "<<new_dir_inode<<" "<<new_dir_data_block<<" "<<cwd<<endl;
 	}
@@ -771,7 +774,7 @@ int rmdir_myfs(char *dirname){
 				continue;
 			}
 			// cout<<" 751 "<<endl;
-			//rm_myfs(buffer) << endl;
+			rm_myfs(buffer);
 			// cout << "735 remove hoye jaa" << rm_myfs(buffer)<<" "<< buffer << endl;
 			//" inode nume "<<*((short *)(file_system+cwd_db_offset+32*db_index+30))<<endl;
 			//int file_inode_no=*((short *)(file_system+cwd_db_offset+32*db_index+30));
@@ -786,39 +789,6 @@ int rmdir_myfs(char *dirname){
 	return 1;
 }
 
-int open_myfs(char *filename, char mode){
-	superblock *temp = (superblock *)file_system;
-	int file_inode = get_file_inode(temp, filename);
-	if(file_inode==-1)
-		return -1;
-	file_desc addfile;
-	addfile.inode_no = file_inode;
-	addfile.r_w_done_bytes = 0;
-	if(mode=='r')
-		addfile.mode = 0;
-	else if(mode=='w')
-		addfile.mode = 1;
-	else
-		return -1;
-	file_table.insert(pair<int, file_desc>(max_fd,addfile));
-	max_fd++;
-	return max_fd-1;
-}
-
-int close_myfs(int fd){
-	map <int, file_desc> :: iterator itr;
-	int n;
-	for (itr = file_table.begin(); itr != file_table.end(); ++itr)
-    {
-    	if(itr->first==fd){
-    		n = file_table.erase(fd);
-    		return n;
-    	}
-    }
-    return -1;
-}
-
-
 int dump_myfs(char* dumpfile){
 	FILE * dump=fopen(dumpfile, "wb");
 	if(dump==NULL){
@@ -830,6 +800,7 @@ int dump_myfs(char* dumpfile){
 	fclose(dump);
 	return 1;
 }
+
 
 int restore_myfs(char *dumpfile){
 	int fd = open(dumpfile, O_RDONLY);
@@ -848,6 +819,7 @@ int restore_myfs(char *dumpfile){
 	fclose(dump);
 	return 1;
 }
+
 
 int main(){
 	int n=0,t,p,q,fd;
@@ -903,7 +875,7 @@ int main(){
 				cin>>src;
 				cout<<rmdir_myfs(src);
 				break;
-			case 10:
+			/*case 10:
 				cout << "Enter filename to open :";
 				cin >> src;
 				char m;
@@ -916,16 +888,16 @@ int main(){
 				cout << "Enter fd to close: ";
 				cin >> fd;
 				cout << "Close ka cout " << close_myfs(fd) <<endl;
-				break;
+				break;*/
 			case 15:
 				cout << "Enter file to dump on :";
 				cin >> src;
-				cout << dump_myfs(src);
+				cout << dump_myfs(src) << endl;
 				break;
 			case 16:
 				cout << "Enter file to restore from :";
 				cin >> src;
-				cout << restore_myfs(src);
+				cout << restore_myfs(src) << endl;
 				break;
 			default:
 				cout<<" abhi implement nahi hua hai babua \n";
