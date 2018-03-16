@@ -789,6 +789,119 @@ int rmdir_myfs(char *dirname){
 	return 1;
 }
 
+int open_myfs(char *filename, char mode){
+	superblock *temp = (superblock *)file_system;
+	int file_inode = get_file_inode(temp, filename);
+	if(file_inode==-1)
+		return -1;
+	file_desc addfile;
+	addfile.inode_no = file_inode;
+	addfile.r_w_done_bytes = 0;
+	if(mode=='r')
+		addfile.mode = 0;
+	else if(mode=='w')
+		addfile.mode = 1;
+	else
+		return -1;
+	file_table.insert(pair<int, file_desc>(max_fd,addfile));
+	max_fd++;
+	return max_fd-1;
+}
+
+int close_myfs(int fd){
+	map <int, file_desc> :: iterator itr;
+	int n;
+	for (itr = file_table.begin(); itr != file_table.end(); ++itr)
+    {
+    	if(itr->first==fd){
+    		n = file_table.erase(fd);
+    		return n;
+    	}
+    }
+    return -1;
+}
+
+int read_myfs(int fd, int nbytes, char *buff){
+	superblock *temp = (superblock *)file_system;
+	//map <int, file_desc> :: iterator itr;
+	file_desc file_details;
+	if(file_table.find(fd)!=file_table.end() && file_table[fd].mode==0){
+		int inode_offset = DATABLOCK_SIZE*(temp->blocks_occupied+file_table[fd].inode_no);
+		inode * inode_det = (inode *)(file_system+inode_offset);
+		int fileSize = inode_det->file_size;
+		nbytes = min(nbytes, fileSize-file_table[fd].r_w_done_bytes);
+		int ret_nbytes = nbytes;
+		int startBlock = file_table[fd].r_w_done_bytes/256;
+		int endBlock = (file_table[fd].r_w_done_bytes+nbytes)/256;
+		int k, write_index=0;
+		for(k=startBlock; k<=endBlock && nbytes>0;k++){
+			if(k<8){
+				int db_offset = DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+inode_det->direct[k]);
+				int block_start_offset =0;
+				if(k==startBlock){
+					block_start_offset = file_table[fd].r_w_done_bytes%256;
+				}
+				int read_size = min(nbytes,DATABLOCK_SIZE-block_start_offset);
+				strncpy(buff+write_index, file_system+db_offset+block_start_offset,read_size);
+				nbytes-= read_size;
+				write_index+= read_size;
+			}
+			else if(k>7 && k<72){
+				int indirect_block_offset = DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+inode_det->indirect);
+				int block_index_req = k-8;
+				int *block_no = (int *)(file_system+indirect_block_offset+4*block_index_req);
+				int db_offset = DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+*block_no);
+				int block_start_offset =0;
+				if(k==startBlock){
+					block_start_offset = file_table[fd].r_w_done_bytes%256;
+				}
+				int read_size = min(nbytes,DATABLOCK_SIZE-block_start_offset);
+				strncpy(buff+write_index, file_system+db_offset+block_start_offset,read_size);
+				nbytes-= read_size;
+				write_index+= read_size;
+			}
+			else if(k>72){
+				int doubly_indirect_offset = DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+inode_det->doubly_indirect);
+				int indirect_block_reqd = (k-72)/64;
+				int *indirect_block_db_no = (int *)(file_system+doubly_indirect_offset+4*indirect_block_reqd);
+				int indirect_block_offset = DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+*indirect_block_db_no);
+				int block_index_req = (k-72)%64;
+				int *block_no = (int *)(file_system+indirect_block_offset+4*block_index_req);
+				int db_offset = DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+*block_no);
+				int block_start_offset =0;
+				if(k==startBlock){
+					block_start_offset = file_table[fd].r_w_done_bytes%256;
+				}
+				int read_size = min(nbytes,DATABLOCK_SIZE-block_start_offset);
+				strncpy(buff+write_index, file_system+db_offset+block_start_offset,read_size);
+				nbytes-= read_size;
+				write_index+= read_size;
+			}
+			cout << "882 write index " << write_index << endl;
+		}
+		file_table[fd].r_w_done_bytes+=ret_nbytes;
+		return ret_nbytes;
+	}
+	return -1;
+}
+
+int eof_myfs(int fd){
+	if(file_table.find(fd)!= file_table.end()){
+		file_desc file_det = file_table[fd];
+		superblock *temp = (superblock *)file_system;
+		int inode_offset = DATABLOCK_SIZE*(temp->blocks_occupied+file_det.inode_no);
+		inode * inode_det = (inode *)(file_system+inode_offset);
+		int fileSize = inode_det->file_size;
+		if(file_det.r_w_done_bytes>= fileSize)
+			return 1;
+		else
+			return 0;
+	}
+	return -1;
+}
+
+
+
 int dump_myfs(char* dumpfile){
 	FILE * dump=fopen(dumpfile, "wb");
 	if(dump==NULL){
@@ -822,8 +935,9 @@ int restore_myfs(char *dumpfile){
 
 
 int main(){
-	int n=0,t,p,q,fd;
+	int n=0,t,p,q,fd, nbytes;
 	char src[30],dst[30],name[30];
+	char *buff;
 	while(n!=-1){
 		cout<<"Enter the n for the function : \n1).create_myfs\t2).copy_pc2myfs\t3).ls_myfs\t4).rm_myfs\n5).showfile_myfs\t6).copy_myfs2pc\t7).mkdir_myfs\t8).chdir_myfs\t9).rmdir_myfs\n10).open_myfs\t11).close_myfs\t12).read_myfs\t13).write_myfs\t14).eof_myfs\t15).dump_myfs\n16).restore_myfs\t17).status_myfs\t18).chmod_myfs\n Enter -1 to quit \n";
 		cout<<"n : ";
@@ -871,15 +985,15 @@ int main(){
 				cout<<chdir_myfs(src);
 				break;
 			case 9:
-				cout<<"Enter the dir to delete to  :";
+				cout<<"Enter the dir to delete to :";
 				cin>>src;
 				cout<<rmdir_myfs(src);
 				break;
-			/*case 10:
-				cout << "Enter filename to open :";
+			case 10:
+				cout << "Enter filename to open : ";
 				cin >> src;
 				char m;
-				cout << "Enter mode:";
+				cout << "Enter mode: ";
 				cin >> m;
 				fd = open_myfs(src, m);
 				cout << "FD aa gaya " << fd << endl; 
@@ -888,7 +1002,22 @@ int main(){
 				cout << "Enter fd to close: ";
 				cin >> fd;
 				cout << "Close ka cout " << close_myfs(fd) <<endl;
-				break;*/
+				break;
+			case 12:
+				cout << "Enter fd: ";
+				cin >> fd;
+				cout << "Enter nbytes: ";
+				cin >> nbytes;
+				buff = (char *)malloc(nbytes*sizeof(char));
+				cout << read_myfs(fd, nbytes, buff) << endl;
+				cout << buff << endl;
+				bzero(buff,nbytes);
+				break;
+			case 14:
+				cout << "Enter fd: ";
+				cin >> fd;
+				cout << "EOF ka cout " << eof_myfs(fd) << endl;
+				break;
 			case 15:
 				cout << "Enter file to dump on :";
 				cin >> src;
