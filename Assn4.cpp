@@ -28,6 +28,16 @@ char *file_system;
 struct tm * timeinfo;
 int file_system_size;
 
+int max_fd; 
+
+typedef struct{
+	int inode_no;
+	int mode; // 0 for read and 2 for write 
+	int r_w_done_bytes;
+} file_desc;
+
+map<int , file_desc> file_table; // opne files tabels 
+
 /*typedef struct{
 	char block[256];
 }datablock;*/
@@ -776,42 +786,38 @@ int rmdir_myfs(char *dirname){
 	return 1;
 }
 
-int open_myfs(char *filename, int mode){
+int open_myfs(char *filename, char mode){
 	superblock *temp = (superblock *)file_system;
-	return 0;	
+	int file_inode = get_file_inode(temp, filename);
+	if(file_inode==-1)
+		return -1;
+	file_desc addfile;
+	addfile.inode_no = file_inode;
+	addfile.r_w_done_bytes = 0;
+	if(mode=='r')
+		addfile.mode = 0;
+	else if(mode=='w')
+		addfile.mode = 1;
+	else
+		return -1;
+	file_table.insert(pair<int, file_desc>(max_fd,addfile));
+	max_fd++;
+	return max_fd-1;
 }
 
-// int dump_myfs( char * dumpfile){
-// 	int fd = creat(dumpfile, 0666);
-// 	if(fd ==-1)
-// 		return -1;
-// 	superblock *temp = (superblock *)file_system;
-// 	if(write(fd, temp, sizeof(superblock))==-1){
-// 		cout << "789 superblock" << endl;
-// 		return -1;
-// 	}
-// 	if(write(fd,temp,temp->blocks_occupied*DATABLOCK_SIZE-sizeof(superblock))==-1){
-// 		return -1;
-// 	}
-// 	int i;
-// 	int inode_offset;
-// 	for(i=0;i<MAX_INODES;i++){
-// 		inode_offset = DATABLOCK_SIZE*(temp->blocks_occupied+i);
-// 		inode * inode_det = (inode *)(file_system+inode_offset);
-// 		if(write(fd, inode_det, DATABLOCK_SIZE*sizeof(char))==-1)
-// 			return -1;
-// 	}
-// 	inode_offset+=DATABLOCK_SIZE;
-// 	if(write(fd, file_system+inode_offset, file_system_size*1024*1024-DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES))==-1)
-// 		return -1;
-// 	return 1;
-// 	/*int fd = creat(dumpfile, 0666);
-// 	if(fd ==-1)
-// 		return -1;
-// 	if(write(fd, file_system, file_system_size*1024*1024)==-1)
-// 		return -1;
-// 	return 1;*/
-// }
+int close_myfs(int fd){
+	map <int, file_desc> :: iterator itr;
+	int n;
+	for (itr = file_table.begin(); itr != file_table.end(); ++itr)
+    {
+    	if(itr->first==fd){
+    		n = file_table.erase(fd);
+    		return n;
+    	}
+    }
+    return -1;
+}
+
 
 int dump_myfs(char* dumpfile){
 	FILE * dump=fopen(dumpfile, "wb");
@@ -844,7 +850,7 @@ int restore_myfs(char *dumpfile){
 }
 
 int main(){
-	int n=0,t,p,q;
+	int n=0,t,p,q,fd;
 	char src[30],dst[30],name[30];
 	while(n!=-1){
 		cout<<"Enter the n for the function : \n1).create_myfs\t2).copy_pc2myfs\t3).ls_myfs\t4).rm_myfs\n5).showfile_myfs\t6).copy_myfs2pc\t7).mkdir_myfs\t8).chdir_myfs\t9).rmdir_myfs\n10).open_myfs\t11).close_myfs\t12).read_myfs\t13).write_myfs\t14).eof_myfs\t15).dump_myfs\n16).restore_myfs\t17).status_myfs\t18).chmod_myfs\n Enter -1 to quit \n";
@@ -896,6 +902,20 @@ int main(){
 				cout<<"Enter the dir to delete to  :";
 				cin>>src;
 				cout<<rmdir_myfs(src);
+				break;
+			case 10:
+				cout << "Enter filename to open :";
+				cin >> src;
+				char m;
+				cout << "Enter mode:";
+				cin >> m;
+				fd = open_myfs(src, m);
+				cout << "FD aa gaya " << fd << endl; 
+				break;
+			case 11:
+				cout << "Enter fd to close: ";
+				cin >> fd;
+				cout << "Close ka cout " << close_myfs(fd) <<endl;
 				break;
 			case 15:
 				cout << "Enter file to dump on :";
