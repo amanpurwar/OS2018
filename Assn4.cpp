@@ -776,68 +776,62 @@ int rmdir_myfs(char *dirname){
 
 
 int main(){
-	int n;
-	printf("Enter size of file system in MB\n");
-	cin>>n;
-	int test = create_myfs(n);
-	cout << test<< endl;
-	cout<<"Enter the file name :";
-	char a[100],b[100];
-	int t =2;
-	cin>>a;
-	copy_pc2myfs(a,a);
-	//showfile_myfs(a,-1);
-	t=2;
-	while(t--){
-		cout<<"Enter the file name :";
-		cin>>a;
-		copy_pc2myfs(a,a);
-		ls_myfs();
+	int n=0,t,p,q;
+	char src[30],dst[30],name[30];
+	while(n!=-1){
+		cout<<"Enter the n for the function : \n1).create_myfs\t2).copy_pc2myfs\t3).ls_myfs\t4).rm_myfs\n5).showfile_myfs\t6).copy_myfs2pc\t7).mkdir_myfs\t8).chdir_myfs\t9).rmdir_myfs\n10).open_myfs\t11).close_myfs\t12).read_myfs\t13).write_myfs\t14).eof_myfs\t15).dump_myfs\n16).restore_myfs\t17).status_myfs\t18).chmod_myfs\n Enter -1 to quit \n";
+		cout<<"n : ";
+		cin>>n;
+		switch(n){
+			case 1:
+				cout<<"Enter file size :";
+				cin>>t;
+				cout<<create_myfs(t);
+				break;
+			case 2:
+				cout<<"Enter filename :";
+				cin>>name;
+				cout<<copy_pc2myfs(name,name);
+				break;
+			case 3:
+				ls_myfs();
+				break;
+			case 4:
+				cout<<"Enter filename to delete : ";
+				cin>>name;
+				cout<<rm_myfs(name);
+				break;
+			case 5:
+				cout<<"Enter filename to show : ";
+				cin>>name;
+				cout<<showfile_myfs(name,-1);
+				break;
+			case 6:
+				cout<<"Enter the new filename on PC :";
+				cin>>src;
+				cout<<"Enter the file to copy from the myfs :";
+				cin>>dst;
+				cout<<copy_myfs2pc(src,dst);
+				break;
+			case 7:
+				cout<<"Enter name of the dir :";
+				cin>>src;
+				cout<<mkdir_myfs(src);
+				break;
+			case 8:
+				cout<<"Enter the dir to change to  :";
+				cin>>src;
+				cout<<chdir_myfs(src);
+				break;
+			case 9:
+				cout<<"Enter the dir to delete to  :";
+				cin>>src;
+				cout<<rmdir_myfs(src);
+				break;
+			default:
+				cout<<" abhi implement nahi hua hai babua \n";
+		}
 	}
-
-	cout<<"Enter the file name delete:";
-	cin>>a;
-	rm_myfs(a);
-	ls_myfs(); 
-
-	
-	cout<<" enter to show ";
-	cin>>a;
-	n= showfile_myfs(a,-1);
-	cout << n << endl;
-	ls_myfs();
-
-	cout << "Enter file name to write" << endl;
-	cin >> a;
-	cout << "Enter filename to transfer from myfs" << endl;
-	cin >> b;
-	copy_myfs2pc(b,a);
-	ls_myfs();
-
-	cout<<" Enter the directory name "<<endl;
-	cin>>a;
-	mkdir_myfs(a);
-	ls_myfs();
-	chdir_myfs(a);
-	ls_myfs();
-	superblock * temp = (superblock *)file_system;
-	cout << temp->cwd<< endl;
-	cout << "Enter file to transfer" << endl;
-	cin >> a;
-	copy_pc2myfs(a,a);
-	ls_myfs();
-	// showfile_myfs(a,-1);
-	cout << "change directory" << endl;
-	cin >> a;
-	chdir_myfs(a);
-	ls_myfs();
-	cout << "Enter directory to be deleted\n";
-	cin >> a;
-	rmdir_myfs(a);
-	//ls_myfs();
-	cout << "Enter file to show\n";
-	cin >> a;
-	showfile_myfs(a,-1);
 	return 0;
 
 }
