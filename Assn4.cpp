@@ -135,6 +135,7 @@ int remove_file_db(superblock * temp, inode* curr_inode){
 	while(blocks_taken>0 && direct_db_index<8 ){
 		int db_index = curr_inode->direct[direct_db_index];
 		clr(db_index, temp->db_bitmap);
+		bzero(file_system+DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+db_index),DATABLOCK_SIZE);
 		curr_inode->direct[direct_db_index] =-1;
 		direct_db_index++;
 		blocks_taken--;
@@ -147,11 +148,13 @@ int remove_file_db(superblock * temp, inode* curr_inode){
 	while(blocks_taken>0 &&  single_indirect_index<64){
 		int *ptr = (int *)(file_system+single_indirect_offset+4*single_indirect_index);
 		clr(*ptr, temp->db_bitmap);
+		bzero(file_system+DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+*ptr),DATABLOCK_SIZE);
 		blocks_taken--;
 		single_indirect_index++;
 		temp->no_used_blocks--;
 	}
 	clr(curr_inode->indirect,temp->db_bitmap);
+	bzero(file_system+DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+curr_inode->indirect),DATABLOCK_SIZE);
 	int double_indirect_offset = DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+curr_inode->doubly_indirect);
 	int double_indirect_index = 0;
 	curr_inode->doubly_indirect = -1;
@@ -165,13 +168,18 @@ int remove_file_db(superblock * temp, inode* curr_inode){
 		while(blocks_taken>0 &&  single_indirect_index<64){
 			int *ptr = (int *)(file_system+single_indirect_offset+4*single_indirect_index);
 			clr(*ptr, temp->db_bitmap);
+			cout << "171  double ka ptr" << *ptr << endl; 
+			//bzero(file_system+DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+*ptr),DATABLOCK_SIZE);
 			blocks_taken--;
 			single_indirect_index++;
 			temp->no_used_blocks--;
 		}
+		bzero(file_system+DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+*single_indirect_block),DATABLOCK_SIZE);
 		double_indirect_index++;
 	}
 	clr(curr_inode->doubly_indirect,temp->db_bitmap);
+	temp->no_used_blocks--;
+	bzero(file_system+DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+curr_inode->doubly_indirect),256);
 	// cout<<" out 164 "<<endl;
 	return 1;
 }
@@ -261,6 +269,8 @@ int copy_pc2myfs(char *source, char *dest){
 		else{
 			superblock *temp = (superblock *)file_system;
 			int check_file_size = FdGetFileSize(fd);
+			if(check_file_size>1067008)
+				return -1;
 			if(ceil((double)check_file_size/256.0)>(temp->total_blocks-temp->no_used_blocks)){
 				clr(next_empty_inode, temp->inode_bitmap);
 				return -1;
@@ -885,6 +895,198 @@ int read_myfs(int fd, int nbytes, char *buff){
 	return -1;
 }
 
+int write_myfs(int fd, int nbytes, char *buff){
+	superblock *temp = (superblock *)file_system;
+	//map <int, file_desc> :: iterator itr;
+	file_desc file_details;
+	if(file_table.find(fd)!=file_table.end() && file_table[fd].mode==1){
+		int inode_to_del_offset = DATABLOCK_SIZE*(temp->blocks_occupied+file_table[fd].inode_no);
+		inode *to_be_del_inode = (inode *)(file_system+inode_to_del_offset);
+		int res;
+		if(file_table[fd].r_w_done_bytes<=0){
+			res= remove_file_db(temp, to_be_del_inode);
+			to_be_del_inode->file_size = 0;
+		}
+		nbytes = min(nbytes, 1067008-file_table[fd].r_w_done_bytes);
+		int to_be_written = nbytes;
+		int no_of_blocks = ceil((double)nbytes/256.0);
+		
+		int block_index = 0;
+		int indirect_index=0;
+		int doubly_indirect_index =0,doubly_indirect_index_data_block=0;
+		
+		int read_counter=0,next_empty_block;
+		int write_offset;
+		// cout<<"209 "<<endl;
+		// r_w_done_bytes
+		int no_of_blocks_written=file_table[fd].r_w_done_bytes/256;
+		cout << "923 r_w_done" << file_table[fd].r_w_done_bytes << endl;
+		int block_start_offset=file_table[fd].r_w_done_bytes%256;
+		if(no_of_blocks_written<8){
+			block_index=no_of_blocks_written;
+		}
+		else if(no_of_blocks_written>7 && no_of_blocks_written<72){
+			block_index=8;
+			indirect_index=no_of_blocks_written-8;
+		} else{
+			block_index=8;
+			indirect_index=64;
+			doubly_indirect_index=(no_of_blocks_written-72)/64;
+			doubly_indirect_index_data_block=(no_of_blocks_written-72)%64;
+		}
+
+		cout << "926 nbytes " << nbytes<< endl;
+		cout << "block_index" << block_index << endl;
+		cout << " 928 indirect " << indirect_index << endl;
+		cout << "929 doubly_indirect_index" << doubly_indirect_index << endl;
+		cout << "930 doubly data block" << doubly_indirect_index_data_block << endl; 
+		cout << "931 block start offset " << block_start_offset << endl;
+
+
+
+		while(block_index<8 && nbytes>0){
+			if(debug){
+				// cout<<" 222 read _left "<<reading_left<<endl;
+			}
+			if(nbytes<DATABLOCK_SIZE){
+				bzero(buff+nbytes,DATABLOCK_SIZE-nbytes);
+
+			}
+			if(block_start_offset<=0){
+				next_empty_block = get_next_empty_block();
+				setter(next_empty_block,temp->db_bitmap);
+				temp->no_used_blocks++;
+			}
+			else{
+				cout<<" 949 direct block index :"<<to_be_del_inode->direct[block_index]<<endl;
+				next_empty_block = to_be_del_inode->direct[block_index];
+			}
+			// cout<<" block used "<<next_empty_block<<endl;
+			write_offset = DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+next_empty_block);
+			strncpy(file_system+write_offset+block_start_offset, buff+read_counter, min(nbytes,DATABLOCK_SIZE));
+			block_start_offset=0;
+			to_be_del_inode->direct[block_index] = next_empty_block;
+			cout<<"957 to_be_del_inode "<<to_be_del_inode->direct[block_index]<<endl;
+			block_index++;
+			read_counter+=min(nbytes,DATABLOCK_SIZE);
+			nbytes-=min(nbytes,DATABLOCK_SIZE);
+			cout << "nbytes " << nbytes << endl;
+			
+		}
+		// cout<<" 234  read _left "<<reading_left<<endl;
+		if(nbytes>0){
+			int indirect_block_offset;
+			if(!(indirect_index>0 || block_start_offset>0)){
+				next_empty_block = get_next_empty_block();
+				temp->no_used_blocks++;
+				//int arr[64];
+				to_be_del_inode->indirect = next_empty_block;
+				indirect_block_offset = DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+next_empty_block);
+				setter(to_be_del_inode->indirect,temp->db_bitmap);
+			}
+			else{
+				cout<<"976 to_be_del_inode->indirect :"<<to_be_del_inode->indirect<<endl;
+				indirect_block_offset = DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+to_be_del_inode->indirect);
+			}
+			while(indirect_index<64 && nbytes>0){
+				if(nbytes<DATABLOCK_SIZE)
+					bzero(buff+nbytes,DATABLOCK_SIZE-nbytes);
+				if(block_start_offset<=0){
+					next_empty_block = get_next_empty_block();
+					setter(next_empty_block, temp->db_bitmap);
+					temp->no_used_blocks++;
+				}
+				else{
+					int *ptr=(int*)(file_system+indirect_block_offset+4*indirect_index);
+					next_empty_block=*ptr;
+				}
+				// cout<<" block used "<<next_empty_block;
+				
+				//read_size = read(fd,buffer, min(reading_left,256));
+				write_offset = DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+next_empty_block);
+				strncpy(file_system+write_offset+block_start_offset, buff+read_counter,min(nbytes,DATABLOCK_SIZE));
+				block_start_offset=0;
+				read_counter+=min(nbytes,DATABLOCK_SIZE);
+				nbytes-=min(nbytes, DATABLOCK_SIZE);
+				int *ptr=(int*)(file_system+indirect_block_offset+4*indirect_index);
+				*ptr=next_empty_block;
+				indirect_index++;
+				cout << "997 nbytes " << nbytes << endl;
+				// cout<<" 279 "<<write_offset<<" "<<endl;
+			}
+			cout <<  "999 " << nbytes << endl;
+		// cout << file_system+indirect_block_offset+256 << endl;
+		}
+		// cout<<reading_left<<" reading_left 276\n";
+		if(nbytes>0){
+			int doubly_indirect_offset;
+			if(!(no_of_blocks_written-72 >0 ||  block_start_offset>0)){
+				next_empty_block = get_next_empty_block();
+				temp->no_used_blocks++;
+				to_be_del_inode->doubly_indirect = next_empty_block;
+				doubly_indirect_offset = DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+next_empty_block);
+				setter(to_be_del_inode->doubly_indirect,temp->db_bitmap);
+			}else{
+				doubly_indirect_offset = DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+to_be_del_inode->doubly_indirect);
+			}
+			
+			int indirect_next_empty_block;
+			while(doubly_indirect_index < 64 && nbytes>0){
+				// cout<<" 285 read_left "<<reading_left<<endl;
+				int indirect_index=0;
+				if(block_start_offset<=0 && doubly_indirect_index_data_block==0){
+					indirect_next_empty_block = get_next_empty_block();
+					setter(indirect_next_empty_block, temp->inode_bitmap);
+
+				}else{
+					int *ptr=(int*)(file_system+doubly_indirect_offset+4*doubly_indirect_index);
+					indirect_next_empty_block=*ptr;
+					indirect_index=doubly_indirect_index_data_block;
+				}
+				// cout<<" block used "<<next_empty_block<<endl;
+				temp->no_used_blocks++;
+				int indirect_block_offset = DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+indirect_next_empty_block);
+				while(indirect_index<64 && nbytes>0){
+					if(nbytes<DATABLOCK_SIZE)
+						bzero(buff+nbytes,DATABLOCK_SIZE-nbytes);
+					if(block_start_offset<=0){
+						next_empty_block = get_next_empty_block();
+						setter(next_empty_block, temp->db_bitmap);
+						temp->no_used_blocks++;
+					}
+					else{
+						int *ptr=(int*)(file_system+indirect_block_offset+4*indirect_index);
+						next_empty_block=*ptr;
+					}
+					// cout<<" block used "<<next_empty_block;
+					
+					//read_size = read(fd,buffer, min(reading_left,256));
+					write_offset = DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+next_empty_block);
+					strncpy(file_system+write_offset+block_start_offset, buff+read_counter,min(nbytes,DATABLOCK_SIZE));
+					block_start_offset=0;
+					read_counter+=min(nbytes,DATABLOCK_SIZE);
+					nbytes-=min(nbytes, DATABLOCK_SIZE);
+					int *ptr=(int*)(file_system+indirect_block_offset+4*indirect_index);
+					*ptr=next_empty_block;
+					indirect_index++;
+				// cout<<" 279 "<<write_offset<<" "<<endl;
+				}
+				int *ptr=(int*)(file_system+doubly_indirect_offset+4*doubly_indirect_index);
+				*ptr=indirect_next_empty_block;
+				doubly_indirect_index++;
+			}
+			cout << "1060 " << nbytes << endl;
+			//cout << "Checking doubly \n"<< *((int *)file_system+doubly_indirect_offset+4) << endl;
+		}
+		file_table[fd].r_w_done_bytes+=to_be_written;
+		to_be_del_inode->file_size += to_be_written;
+		cout << "Inode det " << to_be_del_inode->direct[0] << endl;
+		return to_be_written;
+	}
+	return -1;
+
+}
+
 int eof_myfs(int fd){
 	if(file_table.find(fd)!= file_table.end()){
 		file_desc file_det = file_table[fd];
@@ -933,13 +1135,53 @@ int restore_myfs(char *dumpfile){
 	return 1;
 }
 
+int status_myfs(){
+	cout << "Total size of file system(in MB) = " << file_system_size << endl;
+	int free_space_blocks =0;
+	int free_inodes=0;
+	int no_of_files=0;
+	superblock *temp = (superblock *)file_system;
+	for(int i=0;i<temp->total_blocks;i++){
+		if(!test(i,temp->db_bitmap))
+			free_space_blocks++;
+	}
+	for(int i=0;i<MAX_INODES;i++){
+		if(!test(i,temp->inode_bitmap))
+			free_inodes++;
+		else{
+			inode *inode_det = (inode *)(file_system+DATABLOCK_SIZE*(temp->blocks_occupied+i));
+			if(inode_det->file_type==0)
+				no_of_files++;
+		}
+	}
+	cout << "Free space blocks " <<  free_space_blocks << endl;
+	cout << "No of inodes occupied = " << MAX_INODES-free_inodes << endl;
+	cout << "No of inodes free = " << free_inodes << endl;
+	cout << "Total available space for files(in MB) = " << (double)((temp->total_blocks*DATABLOCK_SIZE))/(1024.0*1024.0) << endl;
+	cout << "Occupied space for files(in MB) = " << ((double)(temp->total_blocks-free_space_blocks)*DATABLOCK_SIZE)/(1024.0*1024.0) << endl;
+	cout << "Free space for files (in MB) = " << ((double)(free_space_blocks*DATABLOCK_SIZE))/(1024.0*1024.0) << endl;
+	cout << "No of files in total = " << no_of_files << endl;
+	return 1;
+}
+
+int chmod_myfs(char *name, int mode){
+	superblock *temp = (superblock *)file_system;
+	int inode_no = get_file_inode(temp, name);
+	if(inode_no==-1)
+		return -1;
+	int inode_offset = DATABLOCK_SIZE*(temp->blocks_occupied+inode_no);
+	inode * inode_det = (inode *)(file_system+ inode_offset);
+	inode_det->access_permission = mode;
+	return 1;
+}
+
 
 int main(){
-	int n=0,t,p,q,fd, nbytes;
+	int n=0,t,p,q,fd,fd2, nbytes;
 	char src[30],dst[30],name[30];
 	char *buff;
 	while(n!=-1){
-		cout<<"Enter the n for the function : \n1).create_myfs\t2).copy_pc2myfs\t3).ls_myfs\t4).rm_myfs\n5).showfile_myfs\t6).copy_myfs2pc\t7).mkdir_myfs\t8).chdir_myfs\t9).rmdir_myfs\n10).open_myfs\t11).close_myfs\t12).read_myfs\t13).write_myfs\t14).eof_myfs\t15).dump_myfs\n16).restore_myfs\t17).status_myfs\t18).chmod_myfs\n Enter -1 to quit \n";
+		cout<<"\nEnter the n for the function : \n1).create_myfs\t2).copy_pc2myfs\t3).ls_myfs\t4).rm_myfs\n5).showfile_myfs\t6).copy_myfs2pc\t7).mkdir_myfs\t8).chdir_myfs\t9).rmdir_myfs\n10).open_myfs\t11).close_myfs\t12).read_myfs\t13).write_myfs\t14).eof_myfs\t15).dump_myfs\n16).restore_myfs\t17).status_myfs\t18).chmod_myfs\n Enter -1 to quit \n";
 		cout<<"n : ";
 		cin>>n;
 		switch(n){
@@ -1013,9 +1255,22 @@ int main(){
 				cout << buff << endl;
 				bzero(buff,nbytes);
 				break;
+			case 13:
+				cout<<"Enter fd: ";
+				cin>>fd;
+				cout<<"Enter nbytes: ";
+				cin>>nbytes;
+				buff=(char*)malloc(25001);
+				fd2=open("temp.txt",O_RDONLY);
+				read(fd2,buff,15000);
+				cout<<write_myfs(fd,15000,buff)<<endl;
+				bzero(buff, 25001);
+				read(fd2,buff,10000);
+				cout<<write_myfs(fd,10000,buff)<<endl;
+				break;
 			case 14:
 				cout << "Enter fd: ";
-				cin >> fd;
+				cin >>fd;
 				cout << "EOF ka cout " << eof_myfs(fd) << endl;
 				break;
 			case 15:
@@ -1027,6 +1282,16 @@ int main(){
 				cout << "Enter file to restore from :";
 				cin >> src;
 				cout << restore_myfs(src) << endl;
+				break;
+			case 17:
+				cout << status_myfs() << endl;
+				break;
+			case 18:
+				cout << "Enter file name for changing permissions: ";
+				cin >> src;
+				cout << "Enter mode: ";
+				cin >> p;
+				cout << chmod_myfs(src, p) << endl;
 				break;
 			default:
 				cout<<" abhi implement nahi hua hai babua \n";
