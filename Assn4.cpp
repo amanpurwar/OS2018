@@ -14,6 +14,7 @@
 #include <pthread.h>
 #include <fcntl.h>
 #include <bits/stdc++.h>
+#include <string>
 
 using namespace std;
 
@@ -272,7 +273,9 @@ int copy_pc2myfs(char *source, char *dest){
 			return -1;
 		else{
 			superblock *temp = (superblock *)file_system;
+			cout << "temp  " << endl;
 			int check_file_size = FdGetFileSize(fd);
+			cout << "277 " << check_file_size << endl;
 			if(check_file_size>1067008)
 				return -1;
 			if(ceil((double)check_file_size/256.0)>(temp->total_blocks-temp->no_used_blocks)){
@@ -326,7 +329,7 @@ int copy_pc2myfs(char *source, char *dest){
 			short *ptr = (short *)(name+30);
 			*ptr = next_empty_inode;
 			memcpy(file_system+data_offset,name,sizeof(name));
-			// cout<<"184 "<<endl;
+			cout<<"184 "<<endl;
 			int new_inode_offset= DATABLOCK_SIZE*(temp->blocks_occupied+next_empty_inode);
 			// int newInodeNo= get_next_empty_inode();
 			inode newInode;
@@ -334,19 +337,19 @@ int copy_pc2myfs(char *source, char *dest){
 			//newInode.owner=(char*)malloc(30*sizeof(char));
 			newInode.access_permission=666;
 			strncpy(newInode.owner,parent_inode->owner,32);
-			// cout << "195 " << parent_inode->owner << endl;
+			cout << "195 " << parent_inode->owner << endl;
 			// cout<<"188 "<<endl;
 			newInode.file_type=0;
 			newInode.r = 1;
 			newInode.w = 1;
-			newInode.file_size=FdGetFileSize(fd);
+			newInode.file_size=check_file_size;
 			time_t currTime;
 			time(&currTime);
 			newInode.last_modified=currTime;
 			newInode.last_read=currTime;
 			newInode.last_inode_modified=currTime;
 			
-
+			cout<<"352"<<endl;
 			/*
 
 			TO DO memcpy of newInode
@@ -355,9 +358,17 @@ int copy_pc2myfs(char *source, char *dest){
 			char *buffer = (char *)malloc(DATABLOCK_SIZE*sizeof(char));
 			int reading_left = newInode.file_size;
 			int no_of_blocks = ceil((double)newInode.file_size/256.0);
+			cout<<no_of_blocks<<endl;
 			int block_index = 0;
 			int read_size;
 			int write_offset;
+			if(no_of_blocks<=0){
+				memcpy(file_system+new_inode_offset,&newInode,sizeof(newInode));
+				// superblock temp2=*temp;
+				// memcpy(file_system,&temp2,sizeof(temp2));
+				// cout<<"370"<<endl;
+				return 1;
+			}
 			// cout<<"209 "<<endl;
 			while(block_index<8 && (read_size=read(fd,buffer,min(reading_left,DATABLOCK_SIZE)))!=0){
 				if(debug){
@@ -966,10 +977,10 @@ int write_myfs(int fd, int nbytes, char *buff){
 			if(debug){
 				// cout<<" 222 read _left "<<reading_left<<endl;
 			}
-			if(nbytes<DATABLOCK_SIZE){
-				bzero(buff+nbytes,DATABLOCK_SIZE-nbytes);
+			// if(nbytes<DATABLOCK_SIZE && to_be_written>DATABLOCK_SIZE){
+			// 	bzero(buff+nbytes,DATABLOCK_SIZE-nbytes);
 
-			}
+			// }
 			if(block_start_offset<=0){
 				next_empty_block = get_next_empty_block();
 				setter(next_empty_block,temp->db_bitmap);
@@ -1212,7 +1223,6 @@ int chmod_myfs(char *name, int mode){
 	}
 	return 1;
 }
-
 
 int main(){
 	int n=0,t,p,q,fd,fd2, nbytes;
