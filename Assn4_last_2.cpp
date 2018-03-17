@@ -1134,6 +1134,46 @@ int restore_myfs(char *dumpfile){
 	return 1;
 }
 
+int status_myfs(){
+	cout << "Total size of file system(in MB) = " << file_system_size << endl;
+	int free_space_blocks =0;
+	int free_inodes=0;
+	int no_of_files=0;
+	superblock *temp = (superblock *)file_system;
+	for(int i=0;i<temp->total_blocks;i++){
+		if(!test(i,temp->db_bitmap))
+			free_space_blocks++;
+	}
+	for(int i=0;i<MAX_INODES;i++){
+		if(!test(i,temp->inode_bitmap))
+			free_inodes++;
+		else{
+			inode *inode_det = (inode *)(file_system+DATABLOCK_SIZE*(temp->blocks_occupied+i));
+			if(inode_det->file_type==0)
+				no_of_files++;
+		}
+	}
+	cout << "Free space blocks " <<  free_space_blocks << endl;
+	cout << "No of inodes occupied = " << MAX_INODES-free_inodes << endl;
+	cout << "No of inodes free = " << free_inodes << endl;
+	cout << "Total available space for files(in MB) = " << (double)((temp->total_blocks*DATABLOCK_SIZE))/(1024.0*1024.0) << endl;
+	cout << "Occupied space for files(in MB) = " << ((double)(temp->total_blocks-free_space_blocks)*DATABLOCK_SIZE)/(1024.0*1024.0) << endl;
+	cout << "Free space for files (in MB) = " << ((double)(free_space_blocks*DATABLOCK_SIZE))/(1024.0*1024.0) << endl;
+	cout << "No of files in total = " << no_of_files << endl;
+	return 1;
+}
+
+int chmod_myfs(char *name, int mode){
+	superblock *temp = (superblock *)file_system;
+	int inode_no = get_file_inode(temp, name);
+	if(inode_no==-1)
+		return -1;
+	int inode_offset = DATABLOCK_SIZE*(temp->blocks_occupied+inode_no);
+	inode * inode_det = (inode *)(file_system+ inode_offset);
+	inode_det->access_permission = mode;
+	return 1;
+}
+
 
 int main(){
 	int n=0,t,p,q,fd,fd2, nbytes;
@@ -1240,6 +1280,16 @@ int main(){
 				cout << "Enter file to restore from :";
 				cin >> src;
 				cout << restore_myfs(src) << endl;
+				break;
+			case 17:
+				cout << status_myfs() << endl;
+				break;
+			case 18:
+				cout << "Enter file name for changing permissions: ";
+				cin >> src;
+				cout << "Enter mode: ";
+				cin >> p;
+				cout << chmod_myfs(src, p) << endl;
 				break;
 			default:
 				cout<<" abhi implement nahi hua hai babua \n";
