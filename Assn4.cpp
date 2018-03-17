@@ -69,6 +69,8 @@ typedef struct{
 	int indirect;
 	int doubly_indirect;
 	int access_permission;
+	int r;
+	int w;
 	int file_count; // No of files in a directory
 }inode;
 
@@ -220,12 +222,14 @@ int create_myfs (int size){
 		root.file_type = 1; // Directory
 		root.file_size = DATABLOCK_SIZE;
 		root.file_count = 0;
-		root.access_permission=0666;
+		root.access_permission=666;
 		time_t timer;
 		time(&timer);
 		root.last_modified = timer;
 		//root.last_read = NULL;
 		root.last_inode_modified = timer;
+		root.r = 1;
+		root.w = 1;
 		int next_empty_block = get_next_empty_block();
 		if(debug){
 			// cout << "Line no 103 "<< next_empty_block << endl;
@@ -282,6 +286,15 @@ int copy_pc2myfs(char *source, char *dest){
 			//cout << "255 " << curr_wd << endl;
 			int offset = DATABLOCK_SIZE*(temp->blocks_occupied+curr_wd);
 			inode *parent_inode = (inode *)(file_system+offset);
+			parent_inode->file_size+=check_file_size;
+			int parent_data_offset=DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+parent_inode->direct[0]);
+			while(strcmp(".",file_system+parent_data_offset)!=0){
+				short * grand_parent_inode_no=(short*)(file_system+parent_data_offset+30);
+				inode* grand_parent_inode=(inode*)(file_system+DATABLOCK_SIZE*(temp->blocks_occupied+*grand_parent_inode_no));
+				grand_parent_inode->file_size+=check_file_size;
+				parent_data_offset=DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+grand_parent_inode->direct[0]);
+			}
+
 			int file_name_offset = (parent_inode->file_count)%8*32;
 			int last_entry_in_directory;
 			int j;
@@ -319,11 +332,13 @@ int copy_pc2myfs(char *source, char *dest){
 			inode newInode;
 			printf("%s\n",parent_inode->owner );
 			//newInode.owner=(char*)malloc(30*sizeof(char));
-			newInode.access_permission=0666;
+			newInode.access_permission=666;
 			strncpy(newInode.owner,parent_inode->owner,32);
 			// cout << "195 " << parent_inode->owner << endl;
 			// cout<<"188 "<<endl;
 			newInode.file_type=0;
+			newInode.r = 1;
+			newInode.w = 1;
 			newInode.file_size=FdGetFileSize(fd);
 			time_t currTime;
 			time(&currTime);
@@ -702,6 +717,8 @@ int mkdir_myfs (char *dirname){
 	inode * new_inode = (inode*)(file_system+inode_offset);
 	//new_inode->owner=(char*)malloc(30);
 	new_inode->file_type=1;
+	new_inode->r = 1;
+	new_inode->w = 1;
 	strncpy(new_inode->owner,parent_inode->owner,32);
 	time_t currTime;
 	time(&currTime);
@@ -802,14 +819,15 @@ int rmdir_myfs(char *dirname){
 int open_myfs(char *filename, char mode){
 	superblock *temp = (superblock *)file_system;
 	int file_inode = get_file_inode(temp, filename);
+	inode * inode_det = (inode *)(file_system+DATABLOCK_SIZE*(temp->blocks_occupied+file_inode));
 	if(file_inode==-1)
 		return -1;
 	file_desc addfile;
 	addfile.inode_no = file_inode;
 	addfile.r_w_done_bytes = 0;
-	if(mode=='r')
+	if(mode=='r' && inode_det->r==1)
 		addfile.mode = 0;
-	else if(mode=='w')
+	else if(mode=='w' && inode_det->w==1)
 		addfile.mode = 1;
 	else
 		return -1;
@@ -1167,11 +1185,31 @@ int status_myfs(){
 int chmod_myfs(char *name, int mode){
 	superblock *temp = (superblock *)file_system;
 	int inode_no = get_file_inode(temp, name);
+	int user_permission = mode/100;
 	if(inode_no==-1)
 		return -1;
 	int inode_offset = DATABLOCK_SIZE*(temp->blocks_occupied+inode_no);
 	inode * inode_det = (inode *)(file_system+ inode_offset);
 	inode_det->access_permission = mode;
+	if(user_permission==0 || user_permission==1){
+		inode_det->r = 0;
+		inode_det->w = 0;
+	}
+	else if(user_permission==2 || user_permission==3){
+		inode_det->r = 0;
+		inode_det->w = 1;
+	}
+	else if(user_permission==4 || user_permission==5){
+		inode_det->r = 1;
+		inode_det->w = 0;
+	}
+	else if(user_permission==6 || user_permission==7){
+		inode_det->r = 1;
+		inode_det->w = 1;
+	}
+	else{
+		return -1;
+	}
 	return 1;
 }
 
@@ -1294,7 +1332,7 @@ int main(){
 				cout << chmod_myfs(src, p) << endl;
 				break;
 			default:
-				cout<<" abhi implement nahi hua hai babua \n";
+				cout<<"ENTER A VALID CHOICE\n";
 		}
 	}
 	return 0;
