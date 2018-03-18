@@ -508,6 +508,8 @@ int rm_myfs(char *filename){
 	superblock * temp = (superblock *) file_system;
 	// cout<<" blocks before delete 430 "<<temp->no_used_blocks<<endl;
 	int file_inode_no = get_file_inode(temp, filename);
+	inode *file_inode = (inode *)(file_system+DATABLOCK_SIZE*(temp->blocks_occupied+file_inode_no));
+	int check_file_size = file_inode->file_size;
 	// cout << "460 "<< file_inode_no << endl;
 	if(file_inode_no==-1)
 		return -1;
@@ -569,6 +571,14 @@ int rm_myfs(char *filename){
 			short *ptr=(short*)(file_system+last_file_dir+30);
 			short *ptr2=(short*)(file_system+file_to_delete+30);
 			*ptr2=*ptr;
+	}
+	cwd_inode->file_size-=check_file_size;
+	int parent_data_offset=DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+cwd_inode->direct[0]);
+	while(strcmp(".",file_system+parent_data_offset)!=0){
+		short * grand_parent_inode_no=(short*)(file_system+parent_data_offset+30);
+		inode* grand_parent_inode=(inode*)(file_system+DATABLOCK_SIZE*(temp->blocks_occupied+*grand_parent_inode_no));
+		grand_parent_inode->file_size-=check_file_size;
+		parent_data_offset=DATABLOCK_SIZE*(temp->blocks_occupied+MAX_INODES+grand_parent_inode->direct[0]);
 	}
 	// cout<<" 498 delete ptr "<<endl; 
 	bzero(file_system+last_file_dir,32);
